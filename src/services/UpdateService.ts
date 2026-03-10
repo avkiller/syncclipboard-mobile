@@ -90,7 +90,7 @@ export async function checkForUpdate(
     throw new Error(`GitHub API 请求失败: ${response.status}`);
   }
 
-  const releases: Array<{ tag_name: string; prerelease: boolean; draft: boolean }> =
+  const releases: Array<{ tag_name: string; prerelease: boolean; draft: boolean; html_url: string }> =
     await response.json();
 
   // 过滤草稿；若不包含 beta 则进一步过滤 prerelease
@@ -109,9 +109,13 @@ export async function checkForUpdate(
   const currentParsed = parseVersion(currentVersionStr);
 
   if (!currentParsed || !latestParsed) {
-    return { hasUpdate: false, latestVersion: latest.tag_name, releaseUrl: RELEASES_PAGE_URL };
+    return { hasUpdate: false, latestVersion: latest.tag_name, releaseUrl: latest.html_url };
   }
 
   const hasUpdate = compareVersions(latestParsed, currentParsed) > 0;
-  return { hasUpdate, latestVersion: versionToStr(latestParsed), releaseUrl: RELEASES_PAGE_URL };
+  return { 
+    hasUpdate, 
+    latestVersion: versionToStr(latestParsed), 
+    releaseUrl: latest.html_url
+  };
 }
