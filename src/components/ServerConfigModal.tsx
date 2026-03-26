@@ -15,7 +15,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/hooks/useTheme';
@@ -39,13 +38,12 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 }) => {
   const { theme } = useTheme();
   const [isTesting, setIsTesting] = useState(false);
+  const testAbortControllerRef = useRef<AbortController | null>(null);
 
-  // 输入框 ref
   const urlRef = useRef<TextInput>(null);
   const usernameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
 
-  // 表单状态
   const [type, setType] = useState<'syncclipboard' | 'webdav'>(
     initialConfig?.type || 'syncclipboard'
   );
@@ -53,7 +51,6 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
   const [username, setUsername] = useState(initialConfig?.username || '');
   const [password, setPassword] = useState(initialConfig?.password || '');
 
-  // 重置表单
   useEffect(() => {
     if (visible && initialConfig) {
       setType(initialConfig.type);
@@ -61,7 +58,6 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       setUsername(initialConfig.username || '');
       setPassword(initialConfig.password || '');
     } else if (visible && !initialConfig) {
-      // 新建时重置为空
       setType('syncclipboard');
       setUrl('');
       setUsername('');
@@ -69,14 +65,30 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
     }
   }, [visible, initialConfig]);
 
-  // 验证表单
+  useEffect(() => {
+    return () => {
+      if (testAbortControllerRef.current) {
+        testAbortControllerRef.current.abort();
+        testAbortControllerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleClose = () => {
+    if (testAbortControllerRef.current) {
+      testAbortControllerRef.current.abort();
+      testAbortControllerRef.current = null;
+      setIsTesting(false);
+    }
+    onClose();
+  };
+
   const validateForm = (): boolean => {
     if (!url.trim()) {
       Alert.alert('错误', '请输入服务器地址');
       return false;
     }
 
-    // 验证 URL 格式
     try {
       new URL(url);
     } catch {
@@ -97,14 +109,22 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
     return true;
   };
 
-  // 测试连接
   const handleTestConnection = async () => {
+    if (isTesting && testAbortControllerRef.current) {
+      testAbortControllerRef.current.abort();
+      testAbortControllerRef.current = null;
+      setIsTesting(false);
+      return;
+    }
+
     if (!url.trim() || !username.trim() || !password.trim()) {
       Alert.alert('提示', '请先填写服务器地址、用户名和密码');
       return;
     }
 
     setIsTesting(true);
+    testAbortControllerRef.current = new AbortController();
+
     try {
       const testConfig: ServerConfig = {
         type,
@@ -115,19 +135,23 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
 
       console.log('[ServerConfigModal] Testing connection:', testConfig.url);
       const client = createAPIClient(testConfig);
-      await client.testConnection();
+      await client.testConnection(testAbortControllerRef.current.signal);
       console.log('[ServerConfigModal] Test succeeded');
 
       Alert.alert('成功', '服务器连接测试成功！');
     } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('[ServerConfigModal] Test cancelled');
+        return;
+      }
       console.error('[ServerConfigModal] Test failed:', error);
       Alert.alert('连接失败', error instanceof Error ? error.message : '无法连接到服务器');
     } finally {
       setIsTesting(false);
+      testAbortControllerRef.current = null;
     }
   };
 
-  // 保存配置
   const handleSave = () => {
     if (!validateForm()) {
       return;
@@ -144,7 +168,7 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
     };
 
     onSave(config);
-    onClose();
+    handleClose();
   };
 
   return (
@@ -152,16 +176,15 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          {/* Header */}
           <View style={[styles.header, { borderBottomColor: theme.colors.divider }]}>
-            <TouchableOpacity onPress={onClose} style={styles.headerButton}>
+            <TouchableOpacity onPress={handleClose} style={styles.headerButton}>
               <Text style={[styles.headerButtonText, { color: theme.colors.primary }]}>取消</Text>
             </TouchableOpacity>
             <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
@@ -323,7 +346,6 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
             </View>
           </ScrollView>
 
-          {/* 测试连接按钮 - 固定在底部 */}
           <View
             style={[
               styles.footer,
@@ -333,16 +355,20 @@ export const ServerConfigModal: React.FC<ServerConfigModalProps> = ({
             <TouchableOpacity
               style={[
                 styles.testButton,
-                {
-                  backgroundColor: theme.colors.primary + '20',
-                  borderColor: theme.colors.primary,
-                },
+                isTesting
+                  ? {
+                      backgroundColor: theme.colors.error + '20',
+                      borderColor: theme.colors.error,
+                    }
+                  : {
+                      backgroundColor: theme.colors.primary + '20',
+                      borderColor: theme.colors.primary,
+                    },
               ]}
               onPress={handleTestConnection}
-              disabled={isTesting}
             >
               {isTesting ? (
-                <ActivityIndicator size="small" color={theme.colors.primary} />
+                <Text style={[styles.testButtonText, { color: theme.colors.error }]}>取消测试</Text>
               ) : (
                 <Text style={[styles.testButtonText, { color: theme.colors.primary }]}>
                   测试连接

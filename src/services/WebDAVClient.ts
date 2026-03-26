@@ -279,16 +279,15 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
    * 测试 WebDAV 连接
    * 使用 PROPFIND 验证路径是否为合法文件夹
    */
-  async testConnection(): Promise<void> {
+  async testConnection(signal?: AbortSignal): Promise<void> {
     try {
-      // 使用 PROPFIND 请求测试连接，深度为 1
-      // 验证当前路径是否为合法的文件夹
       await this.client.request({
         method: 'PROPFIND',
-        url: '/', // 使用根路径，会自动拼接 baseURL
+        url: '/',
         headers: {
           Depth: '1',
         },
+        signal,
       });
     } catch (error) {
       console.error('[WebDAVClient] Connection test failed:', error);

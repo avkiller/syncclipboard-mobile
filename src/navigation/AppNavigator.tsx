@@ -53,6 +53,9 @@ export const AppNavigator = () => {
           screenOptions={({ route }) => ({
             headerStyle: {
               backgroundColor: theme.colors.surface,
+              elevation: 0,
+              shadowOpacity: 0,
+              borderBottomWidth: 0,
             },
             headerTintColor: theme.colors.text,
             headerTitleStyle: {
@@ -61,6 +64,9 @@ export const AppNavigator = () => {
             tabBarStyle: {
               backgroundColor: theme.colors.tabBarBackground,
               borderTopColor: theme.colors.tabBarBorder,
+              borderTopWidth: 1,
+              elevation: 0,
+              shadowOpacity: 0,
             },
             tabBarActiveTintColor: theme.colors.tabBarActive,
             tabBarInactiveTintColor: theme.colors.tabBarInactive,

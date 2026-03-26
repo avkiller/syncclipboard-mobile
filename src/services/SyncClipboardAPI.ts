@@ -32,7 +32,7 @@ export interface ISyncClipboardAPI {
   putContent(content: ClipboardContent, options?: PutContentOptions): Promise<void>;
 
   /** 获取服务器时间 */
-  getServerTime(): Promise<Date>;
+  getServerTime(signal?: AbortSignal): Promise<Date>;
 
   /** 获取服务器版本 */
   getVersion(): Promise<string>;
@@ -142,17 +142,9 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   /**
    * 获取服务器时间
    */
-  async getServerTime(): Promise<Date> {
-    // 尝试从响应头获取服务器时间
-    const response = await this.client.head('/');
-    const dateHeader = response.headers['date'];
-
-    if (dateHeader) {
-      return new Date(dateHeader);
-    }
-
-    // 如果没有 date 头，返回当前时间
-    return new Date();
+  async getServerTime(signal?: AbortSignal): Promise<Date> {
+    const response = await this.get<string>('/api/time', { signal });
+    return new Date(response);
   }
 
   /**
@@ -224,8 +216,16 @@ export class SyncClipboardAPI extends APIClient implements ISyncClipboardAPI {
   /**
    * 测试 API 连接
    */
-  async testConnection(): Promise<void> {
-    // 直接调用 API 测试连接，不捕获错误
-    await this.getServerTime();
+  async testConnection(signal?: AbortSignal): Promise<void> {
+    const serverTime = await this.getServerTime(signal);
+    const localTime = new Date();
+    const timeDiffMs = Math.abs(localTime.getTime() - serverTime.getTime());
+    const timeDiffMinutes = timeDiffMs / (1000 * 60);
+
+    if (timeDiffMinutes > 5) {
+      throw new Error(
+        `服务器时间与本地时间差距过大（${Math.round(timeDiffMinutes)}分钟），请同步系统时间`
+      );
+    }
   }
 }

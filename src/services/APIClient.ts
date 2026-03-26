@@ -372,8 +372,8 @@ export abstract class APIClient {
   /**
    * 测试连接
    */
-  async testConnection(): Promise<void> {
-    await this.get('/');
+  async testConnection(signal?: AbortSignal): Promise<void> {
+    await this.get('/', { signal });
   }
 
   /**

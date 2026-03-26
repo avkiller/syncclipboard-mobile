@@ -429,7 +429,7 @@ export const SettingsScreen = () => {
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={['bottom']}
+      edges={[]}
     >
       <ScrollView style={styles.scrollView}>
         {/* 服务器配置部分 */}
