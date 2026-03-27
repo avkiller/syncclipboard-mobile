@@ -54,9 +54,9 @@ export class ConfigStorage {
     const configJson = await AsyncStorage.getItem(STORAGE_KEYS.CONFIG);
 
     if (configJson) {
-      this.config = JSON.parse(configJson);
+      const savedConfig = JSON.parse(configJson);
+      this.config = { ...DEFAULT_APP_CONFIG, ...savedConfig };
     } else {
-      // 首次运行，使用默认配置
       this.config = { ...DEFAULT_APP_CONFIG };
       await this.saveConfig();
     }
