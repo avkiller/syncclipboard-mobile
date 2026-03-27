@@ -149,10 +149,6 @@ export class HistorySyncService {
   }
 
   async syncIncremental(progressCallback?: SyncProgressCallback): Promise<void> {
-    if (!this.lastSyncTime) {
-      return this.syncAll(progressCallback);
-    }
-
     return this.executeSync(false, progressCallback);
   }
 

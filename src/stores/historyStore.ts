@@ -385,6 +385,28 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       if (filter.type && filter.type.length > 0 && !filter.type.includes(record.type)) {
         return false;
       }
+      if (filter.starredOnly && !record.starred) {
+        return false;
+      }
+      if (filter.pinnedOnly && !record.pinned) {
+        return false;
+      }
+      if (filter.syncedOnly && record.syncStatus !== 1) {
+        return false;
+      }
+      if (filter.localOnly && !record.hasData) {
+        return false;
+      }
+      if (
+        filter.syncStatus &&
+        filter.syncStatus.length > 0 &&
+        !filter.syncStatus.includes(record.syncStatus ?? 0)
+      ) {
+        return false;
+      }
+      if (filter.transferringOnly && record.syncStatus !== 2) {
+        return false;
+      }
       return true;
     };
 

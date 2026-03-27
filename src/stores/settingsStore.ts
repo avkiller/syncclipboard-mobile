@@ -144,12 +144,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   updateConfig: async (updates: Partial<AppConfig>) => {
-    set({ isSaving: true, error: null });
+    set((state) => ({
+      config: state.config ? { ...state.config, ...updates } : null,
+      isSaving: true,
+      error: null,
+    }));
 
     try {
       await configStorage.updateConfig(updates);
-      const config = await configStorage.getConfig();
-      set({ config, isSaving: false });
+      set({ isSaving: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to update config';
       set({ error: errorMessage, isSaving: false });

@@ -730,19 +730,23 @@ export function HistoryScreen() {
           console.log('[HistoryScreen] Screen focused, starting incremental sync');
           const { getHistorySyncService } = await import('@/services/HistorySyncService');
           const syncService = getHistorySyncService();
-          if (syncService.isInitialized()) {
-            setIsSyncing(true);
-            try {
-              await syncService.syncIncremental();
-            } catch (error) {
-              console.error('[HistoryScreen] Failed to incremental sync:', error);
-              const errorMessage = error instanceof Error ? error.message : '未知错误';
-              setError({
-                title: '历史记录增量同步失败',
-                message: errorMessage,
-              });
-            } finally {
-              setIsSyncing(false);
+          const serverConfig = currentConfig?.servers[currentConfig?.activeServerIndex];
+          if (serverConfig) {
+            const initialized = await syncService.ensureInitialized(serverConfig);
+            if (initialized) {
+              setIsSyncing(true);
+              try {
+                await syncService.syncIncremental();
+              } catch (error) {
+                console.error('[HistoryScreen] Failed to incremental sync:', error);
+                const errorMessage = error instanceof Error ? error.message : '未知错误';
+                setError({
+                  title: '历史记录增量同步失败',
+                  message: errorMessage,
+                });
+              } finally {
+                setIsSyncing(false);
+              }
             }
           }
         }
