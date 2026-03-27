@@ -79,6 +79,9 @@ export interface AppConfig {
 
   /** 是否需要整理历史记录（关闭同步或切换服务器后设置） */
   needsHistoryReorganize?: boolean;
+
+  /** 日志等级 */
+  logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
 /**
@@ -245,6 +248,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   lastUpdateCheckDate: '',
   updateToBeta: false,
   enableHistorySync: false, // 默认关闭历史记录同步
+  logLevel: 'info', // 默认 info 级别
 };
 
 /**

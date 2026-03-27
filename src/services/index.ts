@@ -38,6 +38,23 @@ export { HistoryStorage, historyStorage } from './HistoryStorage';
 export { CacheManager, cacheManager } from './CacheManager';
 export { SecureStorage, secureStorage } from './SecureStorage';
 
+// Logger Service
+export {
+  initLogger,
+  getLogger,
+  setLogLevel,
+  getLogDirectory,
+  getLogFilePaths,
+  calculateLogSize,
+  clearLogs,
+  cleanOldLogs,
+  log,
+  exportLogs,
+  saveLogsToFile,
+  type LogConfig,
+  type LogLevel,
+} from './Logger';
+
 // Factory function to create appropriate API client
 import { SyncClipboardAPI } from './SyncClipboardAPI';
 import { WebDAVClient } from './WebDAVClient';

@@ -106,6 +106,9 @@ interface SettingsState {
   /** 设置是否启用历史记录同步 */
   setEnableHistorySync: (enabled: boolean) => Promise<void>;
 
+  /** 设置日志等级 */
+  setLogLevel: (level: 'debug' | 'info' | 'warn' | 'error') => Promise<void>;
+
   // 导入/导出
   /** 导出配置 */
   exportConfig: () => Promise<string>;
@@ -304,6 +307,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setEnableHistorySync: async (enabled: boolean) => {
     await get().updateConfig({ enableHistorySync: enabled });
+  },
+
+  setLogLevel: async (level: 'debug' | 'info' | 'warn' | 'error') => {
+    await get().updateConfig({ logLevel: level });
   },
 
   exportConfig: async () => {

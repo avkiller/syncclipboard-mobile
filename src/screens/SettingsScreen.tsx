@@ -26,7 +26,15 @@ import { useSettingsStore } from '@/stores';
 import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
 import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
-import { ShortcutService, checkForUpdate } from '@/services';
+import {
+  ShortcutService,
+  checkForUpdate,
+  calculateLogSize,
+  clearLogs,
+  saveLogsToFile,
+  setLogLevel as setLoggerLogLevel,
+  type LogLevel,
+} from '@/services';
 import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
 
 export const SettingsScreen = () => {
@@ -46,6 +54,7 @@ export const SettingsScreen = () => {
     setLastUpdateCheckDate,
     setUpdateToBeta,
     setEnableHistorySync,
+    setLogLevel,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -65,6 +74,7 @@ export const SettingsScreen = () => {
   const [localHistorySyncEnabled, setLocalHistorySyncEnabled] = useState(
     config?.enableHistorySync ?? false
   );
+  const [showLogLevelMenu, setShowLogLevelMenu] = useState(false);
 
   // 更新检查状态
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -140,6 +150,7 @@ export const SettingsScreen = () => {
   // 存储大小状态
   const [cacheSize, setCacheSize] = useState<number>(0);
   const [historySize, setHistorySize] = useState<number>(0);
+  const [logSize, setLogSize] = useState<number>(0);
   const [isCalculating, setIsCalculating] = useState<boolean>(true);
 
   // 目录对象
@@ -371,8 +382,10 @@ export const SettingsScreen = () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
       const cacheSizeValue = calculateDirectorySize(cacheDir);
       const historySizeValue = calculateDirectorySize(historyDir);
+      const logSizeValue = calculateLogSize();
       setCacheSize(cacheSizeValue);
       setHistorySize(historySizeValue);
+      setLogSize(logSizeValue);
     } catch (error) {
       console.error('Failed to calculate storage sizes:', error);
     } finally {
@@ -405,6 +418,58 @@ export const SettingsScreen = () => {
       ],
       { cancelable: true }
     );
+  };
+
+  // 清除日志
+  const handleClearLogs = () => {
+    Alert.alert(
+      '清空日志',
+      '确定要清空日志目录吗？这将删除所有日志文件。',
+      [
+        {
+          text: '取消',
+          style: 'cancel',
+        },
+        {
+          text: '确定',
+          onPress: async () => {
+            try {
+              clearLogs();
+              await calculateStorageSizes();
+              showMessage('日志已清空', 'success');
+            } catch {
+              showMessage('清空日志失败', 'error');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  // 导出日志
+  const handleExportLogs = async () => {
+    try {
+      const success = await saveLogsToFile();
+      if (success) {
+        showMessage('日志已保存', 'success');
+      } else {
+        showMessage('导出日志失败', 'error');
+      }
+    } catch {
+      showMessage('导出日志失败', 'error');
+    }
+  };
+
+  // 设置日志等级
+  const handleSetLogLevel = async (level: LogLevel) => {
+    try {
+      await setLogLevel(level);
+      setLoggerLogLevel(level);
+      showMessage(`日志等级已设置为 ${level}`, 'success');
+    } catch {
+      showMessage('设置日志等级失败', 'error');
+    }
   };
 
   // 处理添加下载快捷方式
@@ -662,6 +727,24 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  日志空间占用
+                </Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                  {isCalculating ? '加载中...' : formatFileSize(logSize)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.clearButton, { backgroundColor: theme.colors.primary }]}
+                onPress={handleClearLogs}
+                disabled={isCalculating}
+              >
+                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>清理</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   历史记录空间占用
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
@@ -698,6 +781,99 @@ export const SettingsScreen = () => {
                 />
                 <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>条</Text>
               </View>
+            </View>
+          </View>
+        </View>
+
+        {/* 日志设置部分 */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderBase}>
+            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>日志</Text>
+          </View>
+
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
+            ]}
+          >
+            <TouchableOpacity
+              style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
+              onPress={() => setShowLogLevelMenu(!showLogLevelMenu)}
+            >
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>日志等级</Text>
+              <View style={styles.dropdownValue}>
+                <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
+                  {config?.logLevel === 'debug'
+                    ? '调试'
+                    : config?.logLevel === 'info'
+                      ? '信息'
+                      : config?.logLevel === 'warn'
+                        ? '警告'
+                        : '错误'}
+                </Text>
+                {showLogLevelMenu ? (
+                  <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
+                ) : (
+                  <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {showLogLevelMenu && (
+              <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
+                {[
+                  { label: '调试', value: 'debug' as LogLevel },
+                  { label: '信息', value: 'info' as LogLevel },
+                  { label: '警告', value: 'warn' as LogLevel },
+                  { label: '错误', value: 'error' as LogLevel },
+                ].map((option, index) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.dropdownItem,
+                      index < 3
+                        ? {
+                            borderBottomWidth: StyleSheet.hairlineWidth,
+                            borderBottomColor: theme.colors.divider,
+                          }
+                        : undefined,
+                    ]}
+                    onPress={() => {
+                      handleSetLogLevel(option.value);
+                      setShowLogLevelMenu(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        {
+                          color:
+                            config?.logLevel === option.value
+                              ? theme.colors.primary
+                              : theme.colors.text,
+                        },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    {config?.logLevel === option.value && (
+                      <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <View style={styles.settingRow}>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>导出日志</Text>
+              <TouchableOpacity
+                style={[styles.clearButton, { backgroundColor: theme.colors.primary }]}
+                onPress={handleExportLogs}
+                disabled={isCalculating}
+              >
+                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>导出</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -952,6 +1128,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
+  optionInfo: {
+    flex: 1,
+  },
   optionLabel: {
     fontSize: 16,
   },
@@ -1036,6 +1215,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  dropdownValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dropdownValueText: {
+    fontSize: 16,
+  },
+  dropdownMenu: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  dropdownItemText: {
+    fontSize: 16,
+  },
   clearButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -1044,6 +1244,17 @@ const styles = StyleSheet.create({
   clearButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  buttonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  exportButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   refreshButton: {
     paddingHorizontal: 16,

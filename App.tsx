@@ -7,6 +7,7 @@ import { QuickTileLoadingScreen } from './src/screens/QuickTileLoadingScreen';
 import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
 import { SyncDirection } from './src/types/sync';
 import { useSettingsStore } from './src/stores';
+import { initLogger } from './src/services/Logger';
 
 const QUICK_TILE_UPLOAD_URL = 'syncclipboard://quick-tile-upload';
 const QUICK_TILE_DOWNLOAD_URL = 'syncclipboard://quick-tile';
@@ -42,6 +43,10 @@ export default function App() {
   const [shouldExitAfterSync, setShouldExitAfterSync] = useState(false);
   const [syncDirection, setSyncDirection] = useState<SyncDirection>(SyncDirection.Download);
   const { config, loadConfig, isLoaded } = useSettingsStore();
+
+  useEffect(() => {
+    initLogger();
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) {
