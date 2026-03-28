@@ -8,7 +8,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Platform, Share, Image } from
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
-import { openFile, shareFile, saveFile } from '@/utils/fileActions';
+import { useMessageStore } from '@/stores/messageStore';
+import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
 
 interface CurrentClipboardCardProps {
   clipboard: ClipboardContent | null;
@@ -35,6 +36,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 }) => {
   const { theme } = useTheme();
   const { config } = useSettingsStore();
+  const { showMessage } = useMessageStore();
   const isDebugMode = config?.debugMode ?? false;
   const [, setUpdateTrigger] = useState(0);
 
@@ -217,13 +219,24 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   // 判断是否显示保存按钮（非Text类型且有文件URI）
   const canShowSaveButton = canShowShareButton;
 
-  // 保存文件到用户选择的目录
+  // 保存文件到用户选择的目录（图片类型保存到相册）
   const handleSaveFile = async () => {
     if (!clipboard.fileUri) return;
     try {
-      await saveFile(clipboard.fileUri, clipboard.fileName);
+      if (clipboard.type === 'Image') {
+        await saveToGallery(clipboard.fileUri);
+        showMessage('已保存到相册', 'success');
+      } else {
+        await saveFile(clipboard.fileUri, clipboard.fileName);
+        showMessage('已储存到设备', 'success');
+      }
     } catch (error) {
+      if (error instanceof Error && error.message === 'Media library permission denied') {
+        showMessage('需要相册权限才能保存图片', 'error');
+        return;
+      }
       console.error('[CurrentClipboardCard] Failed to save file:', error);
+      showMessage('保存失败', 'error');
     }
   };
 

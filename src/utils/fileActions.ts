@@ -4,6 +4,7 @@
  */
 
 import { NativeModules, Platform } from 'react-native';
+import * as MediaLibrary from 'expo-media-library';
 import { nativeCopyFile } from 'native-util';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
@@ -117,4 +118,24 @@ export async function shareFile(fileUri: string, fileName?: string): Promise<voi
     dialogTitle: fileName || '分享文件',
     UTI: mimeType,
   });
+}
+
+/**
+ * 保存图片到相册
+ * 仅支持图片类型文件
+ */
+export async function saveToGallery(fileUri: string): Promise<void> {
+  const mimeType = getMimeTypeFromUri(fileUri);
+  const isImage = mimeType.startsWith('image/');
+
+  if (!isImage) {
+    throw new Error('仅支持保存图片到相册');
+  }
+
+  const { status } = await MediaLibrary.requestPermissionsAsync();
+  if (status !== 'granted') {
+    throw new Error('Media library permission denied');
+  }
+
+  await MediaLibrary.createAssetAsync(fileUri);
 }

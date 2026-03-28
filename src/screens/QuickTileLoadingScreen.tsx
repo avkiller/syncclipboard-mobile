@@ -4,7 +4,7 @@ import { SyncDirection } from '@/types/sync';
 import { ClipboardContent } from '@/types/clipboard';
 import { SyncManager } from '@/services/SyncManager';
 import { useSyncStore } from '@/stores/syncStore';
-import { openFile, shareFile, saveFile } from '@/utils/fileActions';
+import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
 import { QuickLoadingPage, SuccessButtonConfig } from '@/components/QuickLoadingPage';
 
 interface QuickTileLoadingScreenProps {
@@ -38,16 +38,13 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
       }
 
       const content = result.content;
-      let toastMessage = isUpload ? '上传成功' : '下载成功';
-      if (content) {
-        if (content.type === 'Text' && content.text) {
-          const preview = content.text.trim().replace(/\s+/g, ' ');
-          toastMessage = preview.length > 40 ? preview.slice(0, 40) + '…' : preview;
-        } else if (content.fileName) {
-          toastMessage = content.fileName;
-        }
+
+      // 只有文本类型才显示 Toast 提示
+      if (content && content.type === 'Text' && content.text) {
+        const preview = content.text.trim().replace(/\s+/g, ' ');
+        const toastMessage = preview.length > 40 ? preview.slice(0, 40) + '…' : preview;
+        ToastAndroid.show(toastMessage, ToastAndroid.SHORT);
       }
-      ToastAndroid.show(toastMessage, ToastAndroid.SHORT);
 
       // 下载了非文本文件时，存入 state，触发重渲染更新 successButtons
       if (!isUpload && content && content.type !== 'Text' && content.fileUri) {
@@ -69,11 +66,24 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
           },
         },
         {
-          label: '保存',
+          label: fileContent.type === 'Image' ? '保存到相册' : '保存',
           onPress: async () => {
             try {
-              await saveFile(fileContent.fileUri!, fileContent.fileName);
-            } catch {}
+              if (fileContent.type === 'Image') {
+                await saveToGallery(fileContent.fileUri!);
+                ToastAndroid.show('已保存到相册', ToastAndroid.SHORT);
+              } else {
+                await saveFile(fileContent.fileUri!, fileContent.fileName);
+                ToastAndroid.show('已储存到设备', ToastAndroid.SHORT);
+              }
+            } catch (error) {
+              console.error('[QuickTileLoadingScreen] Failed to save file:', error);
+              if (error instanceof Error && error.message === 'Media library permission denied') {
+                ToastAndroid.show('需要相册权限才能保存图片', ToastAndroid.SHORT);
+                return;
+              }
+              ToastAndroid.show('保存失败', ToastAndroid.SHORT);
+            }
           },
         },
         {

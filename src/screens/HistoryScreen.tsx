@@ -38,7 +38,7 @@ import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { TransferQueueModal } from '@/components/TransferQueueModal';
 import { copyToLocalClipboard } from '@/utils/clipboard';
-import { openFile, saveFile, shareFile } from '@/utils/fileActions';
+import { openFile, saveFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { calculateTextHash } from '@/utils/hash';
@@ -413,16 +413,25 @@ export function HistoryScreen() {
     [showMessage]
   );
 
-  // 储存文件到设备
+  // 储存文件到设备（图片类型保存到相册）
   const handleSave = useCallback(
     async (item: ClipboardItem) => {
       if (!item.fileUri) return;
       try {
-        await saveFile(item.fileUri, item.dataName);
-        showMessage('已储存到设备', 'success');
+        if (item.type === 'Image') {
+          await saveToGallery(item.fileUri);
+          showMessage('已保存到相册', 'success');
+        } else {
+          await saveFile(item.fileUri, item.dataName);
+          showMessage('已储存到设备', 'success');
+        }
       } catch (error) {
         if (error instanceof Error && error.message === 'Storage permission denied') {
           showMessage('已取消储存', 'info');
+          return;
+        }
+        if (error instanceof Error && error.message === 'Media library permission denied') {
+          showMessage('需要相册权限才能保存图片', 'error');
           return;
         }
         console.error('[HistoryScreen] Failed to save file:', error);
@@ -489,7 +498,7 @@ export function HistoryScreen() {
 
         if (item.type === 'Image' || item.type === 'File' || item.type === 'Group') {
           if (item.fileUri) {
-            options.push('储存到设备');
+            options.push(item.type === 'Image' ? '保存到相册' : '储存到设备');
             actions.push(() => handleSave(item));
           }
         }
@@ -1256,7 +1265,7 @@ export function HistoryScreen() {
                       }}
                     >
                       <Text style={[styles.actionSheetButtonText, { color: theme.colors.text }]}>
-                        储存到设备
+                        {selectedItem.type === 'Image' ? '保存到相册' : '储存到设备'}
                       </Text>
                     </TouchableOpacity>
                     <View
