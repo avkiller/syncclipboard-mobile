@@ -43,6 +43,12 @@ interface HistoryState {
   /** 最后添加项目的时间戳 */
   lastAddedTimestamp: number;
 
+  /** 最后删除的 profileHash 列表（用于通知其他组件） */
+  lastDeletedHashes: string[];
+
+  /** 是否清空了所有历史记录 */
+  historyCleared: boolean;
+
   // 动作
   /** 加载历史记录 */
   loadItems: (page?: number) => Promise<void>;
@@ -101,6 +107,9 @@ interface HistoryState {
   /** 清除错误 */
   clearError: () => void;
 
+  /** 清除删除状态（消费 lastDeletedHashes 和 historyCleared） */
+  clearDeletedState: () => void;
+
   /** 刷新 */
   refresh: () => Promise<void>;
 
@@ -125,6 +134,8 @@ const initialState = {
   error: null,
   selectedIds: new Set<string>(),
   lastAddedTimestamp: 0,
+  lastDeletedHashes: [],
+  historyCleared: false,
 };
 
 /**
@@ -244,6 +255,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
     try {
       await historyStorage.softDeleteItem(profileHash);
+      set({ lastDeletedHashes: [profileHash] });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete item';
       set({ error: errorMessage });
@@ -255,6 +267,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
     try {
       await historyStorage.softDeleteItems(profileHashes);
+      set({ lastDeletedHashes: profileHashes });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete items';
       set({ error: errorMessage });
@@ -316,6 +329,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
         currentPage: 1,
         selectedIds: new Set(),
         isLoading: false,
+        historyCleared: true,
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to clear history';
@@ -367,6 +381,10 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  clearDeletedState: () => {
+    set({ lastDeletedHashes: [], historyCleared: false });
   },
 
   refresh: async () => {

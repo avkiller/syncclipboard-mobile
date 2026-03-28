@@ -81,8 +81,35 @@ export function HomeScreen() {
   const destroySync = useSyncStore((state) => state.destroy);
   const { getActiveServer, loadConfig, isLoaded, config } = useSettingsStore();
   const { tasks: transferTasks, subscribe: subscribeTransferQueue } = useTransferQueueStore();
+  const lastDeletedHashes = useHistoryStore((state) => state.lastDeletedHashes);
+  const historyCleared = useHistoryStore((state) => state.historyCleared);
+  const clearDeletedState = useHistoryStore((state) => state.clearDeletedState);
 
   const activeServer = getActiveServer();
+
+  // 监听历史记录删除事件，重置远程剪贴板的下载状态
+  useEffect(() => {
+    if (!remoteContent?.profileHash) return;
+
+    if (historyCleared) {
+      console.log('[HomeScreen] History cleared, resetting remote content download state');
+      setRemoteContent((prev) => (prev ? { ...prev, fileUri: undefined } : null));
+      clearDeletedState();
+      return;
+    }
+
+    if (lastDeletedHashes.length > 0) {
+      const deletedSet = new Set(lastDeletedHashes.map((h) => h.toLowerCase()));
+      if (remoteContent.profileHash && deletedSet.has(remoteContent.profileHash.toLowerCase())) {
+        console.log(
+          '[HomeScreen] Remote content deleted from history, resetting download state:',
+          remoteContent.profileHash
+        );
+        setRemoteContent((prev) => (prev ? { ...prev, fileUri: undefined } : null));
+      }
+      clearDeletedState();
+    }
+  }, [lastDeletedHashes, historyCleared, remoteContent?.profileHash, clearDeletedState]);
 
   // 订阅下载队列状态变化
   useEffect(() => {
