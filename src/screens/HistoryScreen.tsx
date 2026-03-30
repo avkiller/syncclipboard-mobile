@@ -754,19 +754,28 @@ export function HistoryScreen() {
             console.log('[HistoryScreen] Starting history reorganization...');
 
             const { HistoryStorage } = await import('@/services/HistoryStorage');
+            const { getHistorySyncService } = await import('@/services/HistorySyncService');
             const historyStorage = HistoryStorage.getInstance();
+            const syncService = getHistorySyncService();
+
+            const abortController = new AbortController();
+            syncService.setReorganizeAbortController(abortController);
+
             historyStorage.beginSilentMode();
 
             try {
-              const { getHistorySyncService } = await import('@/services/HistorySyncService');
-              const syncService = getHistorySyncService();
-              await syncService.cleanupRemoteHistorys();
+              await syncService.cleanupRemoteHistorys(abortController.signal);
               await historyStorage.cleanupByCount();
               console.log('[HistoryScreen] History reorganization completed');
               await useSettingsStore.getState().updateConfig({ needsHistoryReorganize: false });
             } catch (error) {
-              console.error('[HistoryScreen] History reorganization failed:', error);
+              if (error instanceof DOMException && error.name === 'AbortError') {
+                console.log('[HistoryScreen] History reorganization cancelled');
+              } else {
+                console.error('[HistoryScreen] History reorganization failed:', error);
+              }
             } finally {
+              syncService.setReorganizeAbortController(null);
               setIsReorganizing(false);
               historyStorage.endSilentMode();
               await useHistoryStore.getState().refresh();
@@ -1158,7 +1167,7 @@ export function HistoryScreen() {
               <ArrowUp width={20} height={20} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           )}
-          <TopRightMenu items={menuItems} />
+          {!isReorganizing && <TopRightMenu items={menuItems} />}
         </View>
       ),
     });
@@ -1175,6 +1184,7 @@ export function HistoryScreen() {
     hasTasks,
     activeCount,
     pendingCount,
+    isReorganizing,
   ]);
 
   return (

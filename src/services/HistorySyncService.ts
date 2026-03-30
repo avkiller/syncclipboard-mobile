@@ -44,6 +44,7 @@ export class HistorySyncService {
   private lastSyncTime: number | null = null;
   private isSyncing = false;
   private syncAbortController: AbortController | null = null;
+  private reorganizeAbortController: AbortController | null = null;
   private progressCallbacks: Set<SyncProgressCallback> = new Set();
   private storageChangeCallback:
     | ((items: ClipboardItem[], action: 'add' | 'update' | 'delete') => void)
@@ -248,6 +249,37 @@ export class HistorySyncService {
     if (this.syncAbortController) {
       this.syncAbortController.abort();
     }
+  }
+
+  /**
+   * 取消整理
+   */
+  cancelReorganize(): void {
+    if (this.reorganizeAbortController) {
+      this.reorganizeAbortController.abort();
+    }
+  }
+
+  /**
+   * 取消所有操作（同步和整理）
+   */
+  cancelAll(): void {
+    this.cancelSync();
+    this.cancelReorganize();
+  }
+
+  /**
+   * 获取整理操作的 AbortController
+   */
+  getReorganizeAbortController(): AbortController | null {
+    return this.reorganizeAbortController;
+  }
+
+  /**
+   * 设置整理操作的 AbortController
+   */
+  setReorganizeAbortController(controller: AbortController | null): void {
+    this.reorganizeAbortController = controller;
   }
 
   /**
@@ -986,14 +1018,19 @@ export class HistorySyncService {
     return this.syncRecordUpdate(type, hash, { isDelete: true });
   }
 
-  async cleanupRemoteHistorys(): Promise<void> {
+  async cleanupRemoteHistorys(signal?: AbortSignal): Promise<void> {
     console.log('[HistorySyncService] Cleaning up remote history records...');
     const localItems = await this.historyStorage.getAllItemsIncludingDeleted();
 
-    let deletedCount = 0;
-    let markedCount = 0;
+    const toDeleteHashes: string[] = [];
+    const toMarkAsLocalOnly: string[] = [];
 
     for (const item of localItems) {
+      if (signal?.aborted) {
+        console.log('[HistorySyncService] Cleanup aborted');
+        throw new DOMException('Aborted', 'AbortError');
+      }
+
       if (item.isDeleted) {
         continue;
       }
@@ -1002,21 +1039,33 @@ export class HistorySyncService {
       const noLocalData = item.isLocalFileReady === false;
 
       if (hasRemoteData && noLocalData) {
-        await this.historyStorage.physicalDeleteItem(item.profileHash);
-        deletedCount++;
-        console.log(`[HistorySyncService] Removed server-only record: ${item.profileHash}`);
+        toDeleteHashes.push(item.profileHash);
       } else if (
         item.syncStatus === HistorySyncStatus.Synced ||
         item.syncStatus === HistorySyncStatus.NeedSync ||
         item.syncStatus === undefined
       ) {
-        await this.historyStorage.updateSyncStatus(item.profileHash, HistorySyncStatus.LocalOnly);
-        markedCount++;
+        toMarkAsLocalOnly.push(item.profileHash);
       }
     }
 
+    if (toDeleteHashes.length > 0) {
+      console.log(`[HistorySyncService] Deleting ${toDeleteHashes.length} server-only records...`);
+      await this.historyStorage.physicalDeleteItems(toDeleteHashes);
+    }
+
+    if (toMarkAsLocalOnly.length > 0) {
+      console.log(`[HistorySyncService] Marking ${toMarkAsLocalOnly.length} records as LocalOnly...`);
+      await this.historyStorage.updateItems(
+        toMarkAsLocalOnly.map((hash) => ({
+          profileHash: hash,
+          updates: { syncStatus: HistorySyncStatus.LocalOnly },
+        }))
+      );
+    }
+
     console.log(
-      `[HistorySyncService] Remote history cleanup completed: deleted=${deletedCount}, marked=${markedCount}`
+      `[HistorySyncService] Remote history cleanup completed: deleted=${toDeleteHashes.length}, marked=${toMarkAsLocalOnly.length}`
     );
   }
 

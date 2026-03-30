@@ -836,6 +836,44 @@ export class HistoryStorage {
   }
 
   /**
+   * 批量物理删除历史记录项（一次性保存，减少IO）
+   */
+  public async physicalDeleteItems(profileHashes: string[]): Promise<ClipboardItem[]> {
+    if (!this.initialized) {
+      await this.initialize();
+    }
+
+    const hashSet = new Set(profileHashes.map((h) => h.toLowerCase()));
+    const deletedItems: ClipboardItem[] = [];
+
+    this.history = this.history.filter((item) => {
+      if (hashSet.has(item.profileHash.toLowerCase())) {
+        deletedItems.push(item);
+        return false;
+      }
+      return true;
+    });
+
+    if (deletedItems.length > 0) {
+      await this.saveHistory();
+      this.notifyChangeBatch(deletedItems, 'delete');
+
+      for (const item of deletedItems) {
+        try {
+          const { deleteHistoryFileDir } = await import('../utils/fileStorage');
+          if (item.type && item.profileHash) {
+            await deleteHistoryFileDir(item.type, item.profileHash);
+          }
+        } catch (error) {
+          console.error('[HistoryStorage] Failed to delete history file directory:', error);
+        }
+      }
+    }
+
+    return deletedItems;
+  }
+
+  /**
    * 清理过期的软删除记录（30天后物理删除）
    */
   public async cleanupExpiredSoftDeletes(): Promise<number> {

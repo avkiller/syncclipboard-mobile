@@ -222,6 +222,14 @@ export const SettingsScreen = () => {
     }
 
     try {
+      const { getHistorySyncService } = await import('@/services/HistorySyncService');
+      const syncService = getHistorySyncService();
+      syncService.cancelAll();
+    } catch {
+      // ignore
+    }
+
+    try {
       await setActiveServer(index);
       await updateConfig({ needsHistoryReorganize: true });
       showMessage('已切换服务器', 'success');
@@ -323,6 +331,18 @@ export const SettingsScreen = () => {
 
   // 处理切换历史记录同步
   const handleToggleHistorySync = async (enabled: boolean) => {
+    try {
+      const { getHistorySyncService } = await import('@/services/HistorySyncService');
+      const syncService = getHistorySyncService();
+      syncService.cancelAll();
+
+      if (!enabled) {
+        await syncService.resetSyncCursor();
+      }
+    } catch {
+      // ignore
+    }
+
     setLocalHistorySyncEnabled(enabled);
     try {
       await setEnableHistorySync(enabled);
