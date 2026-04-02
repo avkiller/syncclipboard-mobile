@@ -4,6 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ToastAndroid, Platform } from 'react-native';
 import { SyncClipboardClient } from './SyncClipboardClient';
 import { ISyncClipboardAPI } from './APIClient';
 import { WebDAVClient } from './WebDAVClient';
@@ -30,6 +31,7 @@ import {
   OfflineQueueItem,
 } from '../types/sync';
 import { ClipboardContent } from '../types/clipboard';
+import { useSettingsStore } from '../stores/settingsStore';
 
 const STORAGE_KEY_CONFIG = '@syncclipboard:sync:config';
 const STORAGE_KEY_STATS = '@syncclipboard:sync:stats';
@@ -83,9 +85,13 @@ export class SyncManager {
 
   private syncTimer: NodeJS.Timeout | null = null;
   private isSyncing = false;
+  private currentSyncPromise: Promise<SyncResult> | null = null;
+  private currentSyncAbortController: AbortController | null = null;
   private lastLocalProfileHash: string | null = null;
   private lastRemoteProfileHash: string | null = null;
   private offlineQueue: OfflineQueueItem[] = [];
+  private realtimeSyncCallback: ((content: ClipboardContent) => Promise<void>) | null = null;
+  private pendingUploadContent: ClipboardContent | null = null;
 
   private constructor() {
     // Singleton instances are initialized as class properties
@@ -143,10 +149,9 @@ export class SyncManager {
       this.startAutoSync();
     }
 
-    // 如果是实时模式，监听剪贴板变化
-    if (this.config.mode === SyncMode.Realtime) {
-      this.startRealtimeSync();
-    }
+    // 始终监听剪贴板变化以支持后台自动上传
+    // （React useEffect 在后台不可靠，需要通过 ClipboardMonitor 回调直接触发）
+    this.startRealtimeSync();
 
     // 处理离线队列
     if (this.config.enableOfflineQueue && this.offlineQueue.length > 0) {
@@ -179,11 +184,35 @@ export class SyncManager {
     }
 
     if (this.isSyncing) {
-      return {
-        success: false,
-        direction,
-        error: 'Sync already in progress',
-      };
+      if (isAuto) {
+        // 自动同步：跳过本次执行
+        return {
+          success: false,
+          skipped: true,
+          direction,
+          error: 'Sync already in progress',
+        };
+      }
+      // 手动/快速操作：取消当前同步后再执行
+      if (this.currentSyncAbortController) {
+        this.currentSyncAbortController.abort();
+      }
+      if (this.currentSyncPromise) {
+        await this.currentSyncPromise.catch(() => {});
+      }
+    }
+
+    // 创建内部 AbortController，与外部 signal 合并
+    const internalAbortController = new AbortController();
+    this.currentSyncAbortController = internalAbortController;
+    let mergedSignal: AbortSignal;
+    if (signal) {
+      // 外部 signal 取消时也取消内部 controller
+      const onExternalAbort = () => internalAbortController.abort();
+      signal.addEventListener('abort', onExternalAbort, { once: true });
+      mergedSignal = internalAbortController.signal;
+    } else {
+      mergedSignal = internalAbortController.signal;
     }
 
     const startTime = Date.now();
@@ -194,75 +223,82 @@ export class SyncManager {
       timestamp: Date.now(),
     });
 
-    try {
-      let result: SyncResult;
+    const doSync = async (): Promise<SyncResult> => {
+      try {
+        let result: SyncResult;
 
-      switch (direction) {
-        case SyncDirection.Upload:
-          result = await this.upload(isAuto, signal, onProgress, onPreview);
-          break;
-        case SyncDirection.Download:
-          result = await this.download(isAuto, signal, onProgress, onPreview);
-          break;
-        case SyncDirection.Both:
-          // 先下载后上传，避免覆盖远程内容
-          const downloadResult = await this.download(isAuto, signal, onProgress, onPreview);
-          if (downloadResult.success || downloadResult.skipped) {
-            const uploadResult = await this.upload(isAuto, signal, onProgress, onPreview);
-            result = uploadResult;
-          } else {
-            result = downloadResult;
-          }
-          break;
-      }
-
-      result.duration = Date.now() - startTime;
-
-      // 更新统计信息
-      this.updateStats(result);
-
-      // 发送完成事件
-      this.emitEvent({
-        type: SyncEventType.Completed,
-        result,
-        timestamp: Date.now(),
-      });
-
-      this.setStatus(result.success ? SyncStatus.Success : SyncStatus.Failed);
-
-      return result;
-    } catch (error) {
-      // 提取详细错误信息，包含HTTP状态码
-      let errorMessage = 'Unknown error';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-        // 如果错误对象包含statusCode属性，添加到错误消息中
-        if ('statusCode' in error && typeof error.statusCode === 'number') {
-          errorMessage = `HTTP ${error.statusCode}: ${errorMessage}`;
+        switch (direction) {
+          case SyncDirection.Upload:
+            result = await this.upload(isAuto, mergedSignal, onProgress, onPreview);
+            break;
+          case SyncDirection.Download:
+            result = await this.download(isAuto, mergedSignal, onProgress, onPreview);
+            break;
+          case SyncDirection.Both:
+            // 先下载后上传，避免覆盖远程内容
+            const downloadResult = await this.download(isAuto, mergedSignal, onProgress, onPreview);
+            if (downloadResult.success || downloadResult.skipped) {
+              const uploadResult = await this.upload(isAuto, mergedSignal, onProgress, onPreview);
+              result = uploadResult;
+            } else {
+              result = downloadResult;
+            }
+            break;
         }
+
+        result.duration = Date.now() - startTime;
+
+        // 更新统计信息
+        this.updateStats(result);
+
+        // 发送完成事件
+        this.emitEvent({
+          type: SyncEventType.Completed,
+          result,
+          timestamp: Date.now(),
+        });
+
+        this.setStatus(result.success ? SyncStatus.Success : SyncStatus.Failed);
+
+        return result;
+      } catch (error) {
+        // 提取详细错误信息，包含HTTP状态码
+        let errorMessage = 'Unknown error';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+          // 如果错误对象包含statusCode属性，添加到错误消息中
+          if ('statusCode' in error && typeof error.statusCode === 'number') {
+            errorMessage = `HTTP ${error.statusCode}: ${errorMessage}`;
+          }
+        }
+
+        const result: SyncResult = {
+          success: false,
+          direction,
+          error: errorMessage,
+          duration: Date.now() - startTime,
+        };
+
+        this.updateStats(result);
+        this.emitEvent({
+          type: SyncEventType.Failed,
+          result,
+          timestamp: Date.now(),
+        });
+
+        this.setStatus(SyncStatus.Failed);
+
+        return result;
+      } finally {
+        this.isSyncing = false;
+        this.currentSyncPromise = null;
+        this.currentSyncAbortController = null;
+        await this.savePersistedData();
       }
+    };
 
-      const result: SyncResult = {
-        success: false,
-        direction,
-        error: errorMessage,
-        duration: Date.now() - startTime,
-      };
-
-      this.updateStats(result);
-      this.emitEvent({
-        type: SyncEventType.Failed,
-        result,
-        timestamp: Date.now(),
-      });
-
-      this.setStatus(SyncStatus.Failed);
-
-      return result;
-    } finally {
-      this.isSyncing = false;
-      await this.savePersistedData();
-    }
+    this.currentSyncPromise = doSync();
+    return this.currentSyncPromise;
   }
 
   /**
@@ -279,8 +315,9 @@ export class SyncManager {
     }
 
     try {
-      // 获取本地剪贴板内容
-      let localContent = await this.clipboardManager.getClipboardContent(false);
+      // 优先使用已缓存的内容（来自 ClipboardMonitor 回调，避免后台时重新创建悬浮窗）
+      let localContent =
+        this.pendingUploadContent || (await this.clipboardManager.getClipboardContent(false));
 
       if (!localContent) {
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -561,18 +598,46 @@ export class SyncManager {
    * 启动实时同步
    */
   private startRealtimeSync(): void {
-    this.clipboardMonitor.addCallback(async () => {
+    this.realtimeSyncCallback = async (content: ClipboardContent) => {
+      // 检查是否启用了自动同步
+      const appConfig = useSettingsStore.getState().config;
+      if (!(appConfig?.autoSync ?? false)) return;
+      // 保存已读取的内容，避免 upload 重新读取剪贴板（后台时第二次悬浮窗读取可能失败）
+      this.pendingUploadContent = content;
       // 当剪贴板变化时，上传新内容
-      await this.sync(SyncDirection.Upload);
-    });
-    this.clipboardMonitor.start();
+      const result = await this.sync(SyncDirection.Upload, true);
+      this.pendingUploadContent = null;
+      // 显示系统 Toast 通知
+      if (result.success && !result.skipped && Platform.OS === 'android') {
+        const preview = this.getContentPreview(content);
+        ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
+      }
+    };
+    this.clipboardMonitor.addCallback(this.realtimeSyncCallback);
   }
 
   /**
-   * 停止实时同步
+   * 停止实时同步（只移除自己的回调，不停止整个 ClipboardMonitor）
    */
   private stopRealtimeSync(): void {
-    this.clipboardMonitor.stop();
+    if (this.realtimeSyncCallback) {
+      this.clipboardMonitor.removeCallback(this.realtimeSyncCallback);
+      this.realtimeSyncCallback = null;
+    }
+  }
+
+  /**
+   * 获取内容预览文本（用于 Toast 通知）
+   */
+  private getContentPreview(content: ClipboardContent): string {
+    if (content.type === 'Text' && content.text) {
+      const text = content.text.trim().replace(/\s+/g, ' ');
+      return text.length > 30 ? text.slice(0, 30) + '…' : text;
+    }
+    if (content.fileName) {
+      return content.fileName;
+    }
+    return content.type;
   }
 
   /**

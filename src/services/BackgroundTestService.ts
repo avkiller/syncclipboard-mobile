@@ -6,8 +6,8 @@
  * 开关启动时清零持续时长，停止时保存持续时长到 AsyncStorage。
  */
 
-import { Platform, ToastAndroid } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
+import { Platform } from 'react-native';
+import * as ClipboardProxy from '@/utils/clipboardProxy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setTimer, clearTimer } from 'native-timer';
 import { showDebugNotification, dismissDebugNotification } from 'native-util';
@@ -52,7 +52,7 @@ class BackgroundTestService {
     setTimer(
       async () => {
         try {
-          const clipboardText = await Clipboard.getStringAsync();
+          const clipboardText = await ClipboardProxy.getStringAsync();
           const localText = clipboardText?.slice(0, 50) || '(空)';
           const elapsed = this.startTime
             ? this.formatElapsedTime(Date.now() - this.startTime)
@@ -60,7 +60,6 @@ class BackgroundTestService {
           const message = `本机剪贴板: ${localText}`;
           showDebugNotification(`测试后台运行状态 ${elapsed}`, message);
           console.log(`[BackgroundTest] ${elapsed} - ${message}`);
-          ToastAndroid.show(`后台运行 ${elapsed}\n${message}`, ToastAndroid.SHORT);
 
           // 持久化当前持续时长
           if (this.startTime) {

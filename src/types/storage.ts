@@ -91,6 +91,15 @@ export interface AppConfig {
 
   /** 是否启用后台同步（Android 前台服务） */
   enableBackgroundSync: boolean;
+
+  /** 是否在后台时使用悬浮窗获取剪贴板（仅 Android） */
+  enableClipboardOverlay: boolean;
+
+  /** 调试时显示悬浮窗（仅 Android，调试模式下可用） */
+  debugOverlayVisible: boolean;
+
+  /** 调试时显示 URL Scheme 调用（Toast 通知） */
+  debugUrlScheme: boolean;
 }
 
 /**
@@ -261,6 +270,9 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   remotePollingInterval: 3000, // 默认 3 秒
   localPollingInterval: 1000, // 默认 1 秒
   enableBackgroundSync: false, // 默认关闭后台同步
+  enableClipboardOverlay: false, // 默认关闭悬浮窗获取剪贴板
+  debugOverlayVisible: false, // 默认不显示悬浮窗
+  debugUrlScheme: false, // 默认不显示 URL Scheme 调用
 };
 
 /**

@@ -14,6 +14,7 @@ import {
   TextInput,
   Alert,
   Linking,
+  Platform,
 } from 'react-native';
 import { APP_VERSION } from '@/constants';
 import { Paths, Directory } from 'expo-file-system';
@@ -36,6 +37,7 @@ import {
   type LogLevel,
 } from '@/services';
 import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
+import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -58,6 +60,7 @@ export const SettingsScreen = () => {
     setRemotePollingInterval,
     setLocalPollingInterval,
     setEnableBackgroundSync,
+    setEnableClipboardOverlay,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -80,8 +83,15 @@ export const SettingsScreen = () => {
   const [localBackgroundSyncEnabled, setLocalBackgroundSyncEnabled] = useState(
     config?.enableBackgroundSync ?? false
   );
+  const [localClipboardOverlayEnabled, setLocalClipboardOverlayEnabled] = useState(
+    config?.enableClipboardOverlay ?? false
+  );
   const [localDebugBgTestEnabled, setLocalDebugBgTestEnabled] = useState(false);
   const [lastBgTestDuration, setLastBgTestDuration] = useState<string>('无记录');
+  const [localDebugOverlayVisible, setLocalDebugOverlayVisible] = useState(
+    config?.debugOverlayVisible ?? false
+  );
+  const [localDebugUrlScheme, setLocalDebugUrlScheme] = useState(config?.debugUrlScheme ?? false);
   const [showLogLevelMenu, setShowLogLevelMenu] = useState(false);
 
   // 更新检查状态
@@ -124,6 +134,10 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalBackgroundSyncEnabled(config?.enableBackgroundSync ?? false);
   }, [config?.enableBackgroundSync]);
+
+  useEffect(() => {
+    setLocalClipboardOverlayEnabled(config?.enableClipboardOverlay ?? false);
+  }, [config?.enableClipboardOverlay]);
 
   // 加载上次后台测试持续时长
   useEffect(() => {
@@ -283,13 +297,77 @@ export const SettingsScreen = () => {
 
   // 处理切换后台同步
   const handleToggleBackgroundSync = async (enabled: boolean) => {
-    setLocalBackgroundSyncEnabled(enabled);
+    if (enabled) {
+      Alert.alert(
+        '开启后台同步',
+        '启用后将在后台持续监听远程和本地剪贴板变化，增加电量消耗。\n\nAndroid 10 及以上的系统，应用在后台无法直接获取本地剪贴板内容，你可能需要启用悬浮窗或使用其他工具来解除此限制。\n\n建议在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，以确保后台同步稳定运行。',
+        [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '确认开启',
+            onPress: async () => {
+              setLocalBackgroundSyncEnabled(true);
+              try {
+                await setEnableBackgroundSync(true);
+                showMessage('已启用后台同步', 'success');
+              } catch (error: unknown) {
+                setLocalBackgroundSyncEnabled(false);
+                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setLocalBackgroundSyncEnabled(false);
+    try {
+      await setEnableBackgroundSync(false);
+      showMessage('已禁用后台同步', 'success');
+    } catch (error: unknown) {
+      setLocalBackgroundSyncEnabled(true);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
+  // 处理切换悬浮窗获取剪贴板
+  const handleToggleClipboardOverlay = async (enabled: boolean) => {
+    if (enabled && Platform.OS === 'android') {
+      Alert.alert(
+        '启用悬浮窗获取剪贴板',
+        '启用后，应用将通过悬浮窗在后台获取剪贴板内容。这可能导致部分应用因焦点问题产生功能异常、系统通知中心持续提示「SyncClipboard 正在尝试显示在其他应用上层」。\n\n如果您已通过基于 root 的工具授予了 SyncClipboard 后台剪贴板读取权限，建议关闭此选项。',
+        [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '确定',
+            onPress: async () => {
+              if (!hasOverlayPermission()) {
+                requestOverlayPermission();
+                return;
+              }
+              setLocalClipboardOverlayEnabled(true);
+              try {
+                await setEnableClipboardOverlay(true);
+                showMessage('已启用悬浮窗获取剪贴板', 'success');
+              } catch (error: unknown) {
+                setLocalClipboardOverlayEnabled(false);
+                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setLocalClipboardOverlayEnabled(enabled);
 
     try {
-      await setEnableBackgroundSync(enabled);
-      showMessage(enabled ? '已启用后台同步' : '已禁用后台同步', 'success');
+      await setEnableClipboardOverlay(enabled);
+      showMessage(enabled ? '已启用悬浮窗获取剪贴板' : '已禁用悬浮窗获取剪贴板', 'success');
     } catch (error: unknown) {
-      setLocalBackgroundSyncEnabled(!enabled);
+      setLocalClipboardOverlayEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
@@ -396,6 +474,26 @@ export const SettingsScreen = () => {
   const handleToggleDebugBgTest = async (enabled: boolean) => {
     setLocalDebugBgTestEnabled(enabled);
     try {
+      // 启动前检查通知权限（Android 13+ 需要 POST_NOTIFICATIONS）
+      if (enabled && Platform.OS === 'android') {
+        const { PermissionsAndroid } = require('react-native');
+        const granted = await PermissionsAndroid.check(
+          PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        );
+        if (!granted) {
+          const result = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+          );
+          if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+            setLocalDebugBgTestEnabled(false);
+            Alert.alert('需要通知权限', '后台服务需要通知权限才能正常运行，请在系统设置中允许', [
+              { text: '取消', style: 'cancel' },
+              { text: '前往设置', onPress: () => Linking.openSettings() },
+            ]);
+            return;
+          }
+        }
+      }
       const { getBackgroundTestService, BackgroundTestService } =
         await import('@/services/BackgroundTestService');
       const service = getBackgroundTestService();
@@ -412,6 +510,29 @@ export const SettingsScreen = () => {
     } catch (error: unknown) {
       setLocalDebugBgTestEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : '操作失败', 'error');
+    }
+  };
+
+  // 处理切换调试悬浮窗显示
+  const handleToggleDebugOverlayVisible = async (enabled: boolean) => {
+    setLocalDebugOverlayVisible(enabled);
+    try {
+      await updateConfig({ debugOverlayVisible: enabled });
+      showMessage(enabled ? '悬浮窗将在后台时可见' : '悬浮窗已隐藏', 'success');
+    } catch (error: unknown) {
+      setLocalDebugOverlayVisible(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
+  // 处理切换显示 URL Scheme 调用
+  const handleToggleDebugUrlScheme = async (enabled: boolean) => {
+    setLocalDebugUrlScheme(enabled);
+    try {
+      await updateConfig({ debugUrlScheme: enabled });
+    } catch (error: unknown) {
+      setLocalDebugUrlScheme(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
 
@@ -720,9 +841,6 @@ export const SettingsScreen = () => {
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动复制</Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  仅在切换到前台时生效
-                </Text>
               </View>
               <Switch
                 value={localAutoSyncEnabled}
@@ -736,7 +854,7 @@ export const SettingsScreen = () => {
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>后台同步</Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  切换到后台时持续监听剪贴板（仅 Android）
+                  仅在启用自动复制时生效
                 </Text>
               </View>
               <Switch
@@ -748,6 +866,24 @@ export const SettingsScreen = () => {
                 }
               />
             </View>
+
+            {Platform.OS === 'android' && (
+              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    在后台时通过悬浮窗获取本地剪贴板
+                  </Text>
+                </View>
+                <Switch
+                  value={localClipboardOverlayEnabled}
+                  onValueChange={handleToggleClipboardOverlay}
+                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                  thumbColor={
+                    localClipboardOverlayEnabled ? theme.colors.surface : theme.colors.textTertiary
+                  }
+                />
+              </View>
+            )}
 
             <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
@@ -1277,6 +1413,49 @@ export const SettingsScreen = () => {
                   trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
                   thumbColor={
                     localDebugBgTestEnabled ? theme.colors.surface : theme.colors.textTertiary
+                  }
+                />
+              </View>
+            )}
+
+            {localDebugModeEnabled && Platform.OS === 'android' && (
+              <View
+                style={[styles.settingRowNoBorder, { borderBottomColor: theme.colors.divider }]}
+              >
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    显示悬浮窗
+                  </Text>
+                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                    后台获取剪贴板时显示可见的悬浮窗
+                  </Text>
+                </View>
+                <Switch
+                  value={localDebugOverlayVisible}
+                  onValueChange={handleToggleDebugOverlayVisible}
+                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                  thumbColor={
+                    localDebugOverlayVisible ? theme.colors.surface : theme.colors.textTertiary
+                  }
+                />
+              </View>
+            )}
+
+            {localDebugModeEnabled && (
+              <View
+                style={[styles.settingRowNoBorder, { borderBottomColor: theme.colors.divider }]}
+              >
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    显示 URL Scheme 调用
+                  </Text>
+                </View>
+                <Switch
+                  value={localDebugUrlScheme}
+                  onValueChange={handleToggleDebugUrlScheme}
+                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                  thumbColor={
+                    localDebugUrlScheme ? theme.colors.surface : theme.colors.textTertiary
                   }
                 />
               </View>

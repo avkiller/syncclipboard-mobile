@@ -61,7 +61,7 @@ export default function App() {
 
     // Cold start: app launched via URL scheme
     Linking.getInitialURL().then((url) => {
-      if (config?.debugMode) {
+      if (config?.debugUrlScheme) {
         ToastAndroid.show(`getInitialURL: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
@@ -80,7 +80,7 @@ export default function App() {
 
     // Hot start: app already running, receives URL deep link event
     const urlSub = Linking.addEventListener('url', ({ url }) => {
-      if (config?.debugMode) {
+      if (config?.debugUrlScheme) {
         ToastAndroid.show(`addEventListener url: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
@@ -96,7 +96,7 @@ export default function App() {
     });
 
     return () => urlSub.remove();
-  }, [isLoaded, config?.debugMode]);
+  }, [isLoaded, config?.debugUrlScheme]);
 
   return (
     <GestureHandlerRootView style={styles.container}>

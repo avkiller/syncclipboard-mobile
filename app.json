@@ -32,6 +32,8 @@
       "./plugins/build/withNetworkSecurityConfig.js",
       "./plugins/build/withQuickSettingsTileManifest.js",
       "./plugins/build/withAndroidNativeCode.js",
+      "./plugins/build/withClipboardOverlayPermission.js",
+      "./plugins/build/withNativeUtilPermission.js",
       "./plugins/build/withAbiSplits.js",
       // "./plugins/build/withBackgroundSyncService.js",
       [

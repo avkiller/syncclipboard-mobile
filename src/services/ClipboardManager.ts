@@ -4,6 +4,7 @@
  */
 
 import * as Clipboard from 'expo-clipboard';
+import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { ClipboardContent } from '@/types';
@@ -24,16 +25,16 @@ export class ClipboardManager {
    */
   async getClipboardContent(createTempFile: boolean = true): Promise<ClipboardContent | null> {
     try {
-      // 检查是否有图片
-      const hasImage = await Clipboard.hasImageAsync();
-      if (hasImage) {
-        return await this.getImageContent(createTempFile);
+      // Directly try getting text first (avoids extra overlay windows for type checks)
+      const text = await ClipboardProxy.getStringAsync();
+      if (text && text.length > 0) {
+        return await this.getTextContentFromString(text);
       }
 
-      // 检查是否有文本
-      const hasString = await Clipboard.hasStringAsync();
-      if (hasString) {
-        return await this.getTextContent();
+      // If no text, check for image
+      const hasImage = await ClipboardProxy.hasImageAsync();
+      if (hasImage) {
+        return await this.getImageContent(createTempFile);
       }
 
       // 没有内容
@@ -45,10 +46,9 @@ export class ClipboardManager {
   }
 
   /**
-   * 获取文本内容
+   * 获取文本内容（从已获取的文本字符串构建）
    */
-  private async getTextContent(): Promise<ClipboardContent> {
-    const text = await Clipboard.getStringAsync();
+  private async getTextContentFromString(text: string): Promise<ClipboardContent> {
     const profileHash = await calculateTextHash(text);
     const timestamp = Date.now();
 
@@ -170,7 +170,7 @@ export class ClipboardManager {
   private async getImageContent(createTempFile: boolean): Promise<ClipboardContent> {
     try {
       // 使用 getImageAsync 获取图片数据
-      const imageData = await Clipboard.getImageAsync({ format: 'png' });
+      const imageData = await ClipboardProxy.getImageAsync({ format: 'png' });
 
       if (!imageData || !imageData.data) {
         throw new Error('No image data in clipboard');

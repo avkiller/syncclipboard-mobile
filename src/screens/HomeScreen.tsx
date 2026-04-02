@@ -13,9 +13,11 @@ import {
   AppState,
   AppStateStatus,
   TouchableOpacity,
+  Platform,
+  ToastAndroid,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import * as Clipboard from 'expo-clipboard';
+import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '@/hooks/useTheme';
@@ -341,7 +343,13 @@ export function HomeScreen() {
 
       // 如果启用了自动同步，自动复制远程内容到本地剪贴板（仅 Text 类型）
       const autoSyncEnabled = config?.autoSync ?? false;
-      if (
+      const remoteHash = finalContent.profileHash || finalContent.text || '';
+      const localMatchesRemote = remoteHash === lastLocalProfileHash.current;
+      if (localMatchesRemote) {
+        console.log(
+          `[HomeScreen] ${logPrefix}Remote content matches local clipboard, skipping auto-copy`
+        );
+      } else if (
         autoSyncEnabled &&
         activeServer &&
         !isAutoSyncing.current &&
@@ -356,6 +364,12 @@ export function HomeScreen() {
             console.warn(
               `[HomeScreen] ${logPrefix}Auto-copy skipped due to error: ${result.message}`
             );
+          } else if (Platform.OS === 'android') {
+            const preview =
+              finalContent.type === 'Text' && finalContent.text
+                ? finalContent.text.trim().replace(/\s+/g, ' ').slice(0, 30)
+                : finalContent.fileName || finalContent.type;
+            ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
           }
         } catch (error) {
           console.error(`[HomeScreen] ${logPrefix}Auto-copy to local clipboard failed:`, error);
@@ -926,7 +940,7 @@ export function HomeScreen() {
 
   const handleCopyError = async () => {
     if (error) {
-      await Clipboard.setStringAsync(`${error.title}\n\n${error.message}`);
+      await ClipboardProxy.setStringAsync(`${error.title}\n\n${error.message}`);
       showMessage('错误信息已复制', 'success');
     }
   };

@@ -7,7 +7,7 @@ import { create } from 'zustand';
 import { AppConfig } from '../types/storage';
 import { ServerConfig } from '../types/api';
 import { SyncMode, ConflictResolution } from '../types/sync';
-import { configStorage } from '../services';
+import { configStorage } from '../services/ConfigStorage';
 
 /**
  * 设置状态接口
@@ -117,6 +117,9 @@ interface SettingsState {
 
   /** 设置后台同步 */
   setEnableBackgroundSync: (enabled: boolean) => Promise<void>;
+
+  /** 设置悬浮窗获取剪贴板 */
+  setEnableClipboardOverlay: (enabled: boolean) => Promise<void>;
 
   // 导入/导出
   /** 导出配置 */
@@ -332,6 +335,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setEnableBackgroundSync: async (enabled: boolean) => {
     await get().updateConfig({ enableBackgroundSync: enabled });
+  },
+
+  setEnableClipboardOverlay: async (enabled: boolean) => {
+    await get().updateConfig({ enableClipboardOverlay: enabled });
   },
 
   exportConfig: async () => {

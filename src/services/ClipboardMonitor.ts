@@ -35,7 +35,8 @@ export class ClipboardMonitor {
     debounceDelay: 300,
   };
 
-  private debounceTimer: NodeJS.Timeout | null = null;
+  private debounceTimerTag: string | null = null;
+  private static readonly DEBOUNCE_TIMER_TAG = 'clipboard_monitor_debounce';
 
   constructor(clipboardManager: ClipboardManager, options?: ClipboardMonitorOptions) {
     this.clipboardManager = clipboardManager;
@@ -132,9 +133,9 @@ export class ClipboardMonitor {
     }
 
     // 清除防抖计时器
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
+    if (this.debounceTimerTag) {
+      clearTimer(this.debounceTimerTag);
+      this.debounceTimerTag = null;
     }
 
     console.log('[ClipboardMonitor] Stopped monitoring');
@@ -199,6 +200,7 @@ export class ClipboardMonitor {
       const content = await this.clipboardManager.getClipboardContent();
 
       if (!content) {
+        console.log('[ClipboardMonitor] Poll: clipboard is empty');
         return;
       }
 
@@ -246,23 +248,34 @@ export class ClipboardMonitor {
 
   /**
    * 通知所有回调（带防抖）
+   * 使用 native-timer 替代 JS setTimeout，确保 Android 后台也能可靠触发
    */
   private notifyCallbacks(content: ClipboardContent): void {
     // 清除现有防抖计时器
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
+    if (this.debounceTimerTag) {
+      clearTimer(this.debounceTimerTag);
+      this.debounceTimerTag = null;
     }
 
-    // 设置新的防抖计时器
-    this.debounceTimer = setTimeout(() => {
-      this.callbacks.forEach((callback) => {
-        try {
-          callback(content);
-        } catch (error) {
-          console.error('[ClipboardMonitor] Callback error:', error);
+    // 使用 native-timer 设置防抖（native-timer 是 interval 模式，回调后立即清除实现 one-shot）
+    this.debounceTimerTag = setTimer(
+      () => {
+        // 立即清除，实现 one-shot 防抖
+        if (this.debounceTimerTag) {
+          clearTimer(this.debounceTimerTag);
+          this.debounceTimerTag = null;
         }
-      });
-    }, this.options.debounceDelay);
+        this.callbacks.forEach((callback) => {
+          try {
+            callback(content);
+          } catch (error) {
+            console.error('[ClipboardMonitor] Callback error:', error);
+          }
+        });
+      },
+      this.options.debounceDelay,
+      ClipboardMonitor.DEBOUNCE_TIMER_TAG
+    );
   }
 
   /**
