@@ -114,6 +114,10 @@ export class SyncManager {
     return this.apiClient;
   }
 
+  public setPendingUploadContent(content: ClipboardContent | null): void {
+    this.pendingUploadContent = content;
+  }
+
   /**
    * 创建 API 客户端
    */

@@ -5,7 +5,9 @@
 
 import { Platform, ToastAndroid } from 'react-native';
 import type { EventSubscription } from 'expo-modules-core';
+import * as Clipboard from 'expo-clipboard';
 import { SyncManager } from './SyncManager';
+import { SyncDirection } from '@/types/sync';
 import { calculateTextHash } from '@/utils/hash';
 import { useSettingsStore } from '@/stores';
 import type { ClipboardContent } from '@/types/clipboard';
@@ -88,6 +90,11 @@ class SmsCodeService {
     console.log(`[SmsCodeService] Verification code extracted: ${code}`);
 
     try {
+      // 1. 复制验证码到本地剪贴板
+      await Clipboard.setStringAsync(code);
+      console.log(`[SmsCodeService] Copied verification code to clipboard: ${code}`);
+
+      // 2. 构建内容并通过同步流程上传（复用 hash 去重逻辑）
       const profileHash = await calculateTextHash(code);
 
       const content: ClipboardContent = {
@@ -99,15 +106,23 @@ class SmsCodeService {
       };
 
       const syncManager = SyncManager.getInstance();
-      const apiClient = syncManager.getAPIClient();
-      if (!apiClient) {
+      if (!syncManager.getAPIClient()) {
         console.warn('[SmsCodeService] No API client available, cannot upload verification code');
         return;
       }
 
-      await apiClient.putContent(content);
-      console.log(`[SmsCodeService] Verification code uploaded: ${code}`);
-      ToastAndroid.show(`已上传验证码: ${code}`, ToastAndroid.SHORT);
+      syncManager.setPendingUploadContent(content);
+      const result = await syncManager.sync(SyncDirection.Upload, false);
+      syncManager.setPendingUploadContent(null);
+
+      if (result.success && !result.skipped) {
+        console.log(`[SmsCodeService] Verification code uploaded: ${code}`);
+        ToastAndroid.show(`已上传验证码: ${code}`, ToastAndroid.SHORT);
+      } else if (result.skipped) {
+        console.log(`[SmsCodeService] Upload skipped (already synced): ${code}`);
+      } else {
+        console.warn(`[SmsCodeService] Upload failed: ${result.error}`);
+      }
     } catch (error) {
       console.error('[SmsCodeService] Failed to upload verification code:', error);
     }

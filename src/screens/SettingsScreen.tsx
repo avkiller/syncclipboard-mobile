@@ -318,12 +318,36 @@ export const SettingsScreen = () => {
 
   // 处理切换后台任务总开关
   const handleToggleBackgroundTasks = async (enabled: boolean) => {
-    setLocalBackgroundTasksEnabled(enabled);
+    if (enabled) {
+      Alert.alert(
+        '开启后台任务',
+        '启用后台任务后，应用将在后台持续运行相关服务，增加电量消耗。\n\n建议在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，以确保后台任务稳定运行。',
+        [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '确认开启',
+            onPress: async () => {
+              setLocalBackgroundTasksEnabled(true);
+              try {
+                await setEnableBackgroundTasks(true);
+                showMessage('已启用后台任务', 'success');
+              } catch (error: unknown) {
+                setLocalBackgroundTasksEnabled(false);
+                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setLocalBackgroundTasksEnabled(false);
     try {
-      await setEnableBackgroundTasks(enabled);
-      showMessage(enabled ? '已启用后台任务' : '已禁用后台任务', 'success');
+      await setEnableBackgroundTasks(false);
+      showMessage('已禁用后台任务', 'success');
     } catch (error: unknown) {
-      setLocalBackgroundTasksEnabled(!enabled);
+      setLocalBackgroundTasksEnabled(true);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
@@ -333,7 +357,7 @@ export const SettingsScreen = () => {
     if (enabled) {
       Alert.alert(
         '开启后台同步',
-        '启用后将在后台持续监听远程和本地剪贴板变化，增加电量消耗。\n\nAndroid 10 及以上的系统，应用在后台无法直接获取本地剪贴板内容，你可能需要启用悬浮窗或使用其他工具来解除此限制。\n\n建议在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，以确保后台同步稳定运行。',
+        'Android 10 及以上的系统，应用在后台无法直接获取本地剪贴板内容，你可能需要启用悬浮窗或使用其他工具来解除此限制。',
         [
           { text: '取消', style: 'cancel' },
           {
@@ -369,7 +393,7 @@ export const SettingsScreen = () => {
     if (enabled && Platform.OS === 'android') {
       Alert.alert(
         '启用悬浮窗获取剪贴板',
-        '启用后，应用将通过悬浮窗在后台获取剪贴板内容。这可能导致部分应用因焦点问题产生功能异常、系统通知中心持续提示「SyncClipboard 正在尝试显示在其他应用上层」。\n\n如果您已通过基于 root 的工具授予了 SyncClipboard 后台剪贴板读取权限，建议关闭此选项。',
+        '启用后，应用将通过不可见的悬浮窗在后台获取剪贴板内容。这可能导致部分应用因焦点问题产生功能异常、系统通知中心持续闪烁提示「SyncClipboard 显示在其他应用上层」等问题。\n\n如果您已通过基于 root 的工具授予了 SyncClipboard 后台剪贴板读取权限，建议关闭此选项。',
         [
           { text: '取消', style: 'cancel' },
           {
@@ -407,58 +431,35 @@ export const SettingsScreen = () => {
 
   // 处理切换自动上传短信验证码
   const handleToggleSmsForwarding = async (enabled: boolean) => {
-    if (enabled) {
-      Alert.alert(
-        '启用自动上传短信验证码',
-        '启用后，应用将监听收到的短信，自动提取验证码并上传到服务器。\n\n需要授予短信读取权限。',
-        [
-          { text: '取消', style: 'cancel' },
-          {
-            text: '确认开启',
-            onPress: async () => {
-              if (Platform.OS === 'android') {
-                const { PermissionsAndroid } = require('react-native');
-                const granted = await PermissionsAndroid.check(
-                  PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
-                );
-                if (!granted) {
-                  const result = await PermissionsAndroid.request(
-                    PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
-                  );
-                  if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-                    Alert.alert(
-                      '需要短信权限',
-                      '自动上传验证码需要短信接收权限，请在系统设置中允许',
-                      [
-                        { text: '取消', style: 'cancel' },
-                        { text: '前往设置', onPress: () => Linking.openSettings() },
-                      ]
-                    );
-                    return;
-                  }
-                }
-              }
-              setLocalSmsForwardingEnabled(true);
-              try {
-                await setEnableSmsForwarding(true);
-                showMessage('已启用自动上传短信验证码', 'success');
-              } catch (error: unknown) {
-                setLocalSmsForwardingEnabled(false);
-                showMessage(error instanceof Error ? error.message : '设置失败', 'error');
-              }
-            },
-          },
-        ]
+    if (enabled && Platform.OS === 'android') {
+      const { PermissionsAndroid } = require('react-native');
+      const granted = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
       );
-      return;
+      if (!granted) {
+        const result = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
+        );
+        if (result !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert(
+            '需要短信权限',
+            '自动上传验证码需要短信接收权限，请在系统设置中允许',
+            [
+              { text: '取消', style: 'cancel' },
+              { text: '前往设置', onPress: () => Linking.openSettings() },
+            ]
+          );
+          return;
+        }
+      }
     }
 
-    setLocalSmsForwardingEnabled(false);
+    setLocalSmsForwardingEnabled(enabled);
     try {
-      await setEnableSmsForwarding(false);
-      showMessage('已禁用自动上传短信验证码', 'success');
+      await setEnableSmsForwarding(enabled);
+      showMessage(enabled ? '已启用自动上传短信验证码' : '已禁用自动上传短信验证码', 'success');
     } catch (error: unknown) {
-      setLocalSmsForwardingEnabled(true);
+      setLocalSmsForwardingEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
@@ -1055,7 +1056,7 @@ export const SettingsScreen = () => {
               </View>
             )}
 
-            <View style={styles.settingRow}>
+            <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   本地轮询间隔
@@ -1173,7 +1174,7 @@ export const SettingsScreen = () => {
                 />
               </View>
 
-              <View style={styles.settingRow}>
+              <View style={styles.settingRowNoBorder}>
                 <View style={styles.settingInfo}>
                   <Text
                     style={[
@@ -1186,9 +1187,6 @@ export const SettingsScreen = () => {
                     ]}
                   >
                     自动上传短信验证码
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    监听短信并自动上传验证码
                   </Text>
                 </View>
                 <Switch
@@ -1233,7 +1231,7 @@ export const SettingsScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+            <View style={[Platform.OS === 'android' ? styles.settingRow : styles.settingRowNoBorder, Platform.OS === 'android' && { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   添加桌面快捷方式：上传
@@ -1248,7 +1246,7 @@ export const SettingsScreen = () => {
             </View>
 
             {Platform.OS === 'android' && (
-              <View style={styles.settingRow}>
+              <View style={styles.settingRowNoBorder}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                     添加桌面快捷方式：上传验证码
@@ -1331,7 +1329,7 @@ export const SettingsScreen = () => {
               </View>
             </View>
 
-            <View style={styles.settingRow}>
+            <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   历史记录最大保留条数
@@ -1443,7 +1441,7 @@ export const SettingsScreen = () => {
               </View>
             )}
 
-            <View style={styles.settingRow}>
+            <View style={styles.settingRowNoBorder}>
               <Text style={[styles.settingLabel, { color: theme.colors.text }]}>导出日志</Text>
               <TouchableOpacity
                 style={[styles.clearButton, { backgroundColor: theme.colors.primary }]}
@@ -1574,7 +1572,7 @@ export const SettingsScreen = () => {
               />
             </View>
 
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+            <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   更新到测试版
