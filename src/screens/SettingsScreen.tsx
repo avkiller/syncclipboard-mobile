@@ -1380,8 +1380,11 @@ export const SettingsScreen = () => {
           >
             <View
               style={[
-                localDebugModeEnabled ? styles.settingRow : styles.settingRowNoBorder,
-                { borderBottomColor: theme.colors.divider },
+                styles.settingRowNoBorder,
+                localDebugModeEnabled && {
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                  borderBottomColor: theme.colors.divider,
+                },
               ]}
             >
               <View style={styles.settingInfo}>
@@ -1398,7 +1401,7 @@ export const SettingsScreen = () => {
             </View>
 
             {localDebugModeEnabled && (
-              <View style={styles.settingRow}>
+              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                     测试后台服务稳定性
@@ -1419,9 +1422,7 @@ export const SettingsScreen = () => {
             )}
 
             {localDebugModeEnabled && Platform.OS === 'android' && (
-              <View
-                style={[styles.settingRowNoBorder, { borderBottomColor: theme.colors.divider }]}
-              >
+              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                     显示悬浮窗

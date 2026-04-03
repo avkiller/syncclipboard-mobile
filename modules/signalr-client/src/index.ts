@@ -188,6 +188,10 @@ class JSSignalRClient {
       throw new Error('SignalR is only supported for SyncClipboard server type');
     }
 
+    if (this.isConnecting) {
+      return;
+    }
+
     if (this.connection && this.serverConfig?.url === serverConfig.url) {
       if (this.connection.state === SignalR.HubConnectionState.Connected) {
         return;
