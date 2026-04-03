@@ -30,8 +30,9 @@ import { ClipboardContent, createDefaultClipboardItem, HistorySyncStatus } from 
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
-import { createAPIClient, historyStorage } from '@/services';
+import { createAPIClient, historyStorage, SyncManager } from '@/services';
 import { copyToLocalClipboard } from '@/utils/clipboard';
+import { compareHash } from '@/utils/hash';
 import { getSignalRClient, type ProfileChangedEvent } from 'signalr-client';
 import { setTimer, clearTimer } from 'native-timer';
 import { downloadAndAddToHistory, type DownloadProgressCallback } from '@/utils/remoteClipboard';
@@ -213,6 +214,14 @@ export function HomeScreen() {
       return; // 没有变化，不处理
     }
 
+    // 检查是否是本地刚上传的内容（避免上传后又下载同一内容）
+    const lastUploadedHash = SyncManager.getInstance().getLastUploadedHash();
+    if (lastUploadedHash && compareHash(currentHash, lastUploadedHash)) {
+      console.log(`[HomeScreen] ${logPrefix}Remote hash matches last uploaded hash, skipping`);
+      lastRemoteProfileHash.current = currentHash;
+      return;
+    }
+
     lastRemoteProfileHash.current = currentHash;
 
     // 1. 先检查历史记录中是否存在相同 profileHash 的记录
@@ -370,6 +379,7 @@ export function HomeScreen() {
                 ? finalContent.text.trim().replace(/\s+/g, ' ').slice(0, 30)
                 : finalContent.fileName || finalContent.type;
             ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
+            SyncManager.getInstance().updateForegroundNotification(`已下载: ${preview}`);
           }
         } catch (error) {
           console.error(`[HomeScreen] ${logPrefix}Auto-copy to local clipboard failed:`, error);
@@ -723,8 +733,22 @@ export function HomeScreen() {
       if (!isAutoSyncing.current) {
         isAutoSyncing.current = true;
         sync(SyncDirection.Upload)
-          .then(() => {
+          .then((result) => {
             console.log('[HomeScreen] Auto-sync upload completed');
+            if (result.success && !result.skipped) {
+              // 更新远程 hash，避免 SignalR 推送时误判为远程新内容
+              if (result.profileHash) {
+                lastRemoteProfileHash.current = result.profileHash;
+              }
+              if (Platform.OS === 'android' && currentContent) {
+                const preview =
+                  currentContent.type === 'Text' && currentContent.text
+                    ? currentContent.text.trim().replace(/\s+/g, ' ').slice(0, 30)
+                    : currentContent.fileName || currentContent.type;
+                ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
+                SyncManager.getInstance().updateForegroundNotification(`已上传: ${preview}`);
+              }
+            }
             // 刷新远程显示
             fetchRemoteClipboard(true);
           })
@@ -817,6 +841,50 @@ export function HomeScreen() {
       });
     };
   }, [config?.enableBackgroundTasks, config?.enableSmsForwarding]);
+
+  // 管理前台服务（常驻通知）生命周期
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const shouldRun =
+      config?.enableBackgroundTasks &&
+      config?.enableForegroundNotification &&
+      (config?.enableBackgroundSync || config?.enableSmsForwarding);
+
+    const manageForegroundService = async () => {
+      const ForegroundService = await import('foreground-service');
+      if (shouldRun) {
+        ForegroundService.startService();
+      } else {
+        ForegroundService.stopService();
+      }
+    };
+
+    manageForegroundService();
+
+    // 监听通知栏"停止"按钮
+    let stopSub: { remove(): void } | null = null;
+    if (shouldRun) {
+      import('foreground-service').then((ForegroundService) => {
+        stopSub = ForegroundService.addStopListener(() => {
+          // 关闭所有后台任务
+          useSettingsStore.getState().setEnableBackgroundTasks(false);
+        });
+      });
+    }
+
+    return () => {
+      stopSub?.remove();
+      import('foreground-service').then((ForegroundService) => {
+        ForegroundService.stopService();
+      });
+    };
+  }, [
+    config?.enableBackgroundTasks,
+    config?.enableForegroundNotification,
+    config?.enableBackgroundSync,
+    config?.enableSmsForwarding,
+  ]);
 
   // 监听应用状态变化，控制远程剪贴板轮询或 SignalR
   // 本地剪贴板已由 ClipboardMonitor 持续监听，无需在此处处理

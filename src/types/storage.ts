@@ -109,6 +109,9 @@ export interface AppConfig {
 
   /** 调试时提醒非验证码类短信 */
   debugSmsNotify: boolean;
+
+  /** 启用前台服务常驻通知 */
+  enableForegroundNotification: boolean;
 }
 
 /**
@@ -285,6 +288,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   debugOverlayVisible: false, // 默认不显示悬浮窗
   debugUrlScheme: false, // 默认不显示 URL Scheme 调用
   debugSmsNotify: false, // 默认不提醒非验证码类短信
+  enableForegroundNotification: true, // 默认启用前台服务常驻通知
 };
 
 /**

@@ -35,6 +35,7 @@
       "./plugins/build/withClipboardOverlayPermission.js",
       "./plugins/build/withNativeUtilPermission.js",
       "./plugins/build/withSmsPermission.js",
+      "./plugins/build/withForegroundService.js",
       "./plugins/build/withAbiSplits.js",
       [
         "expo-sharing",

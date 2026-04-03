@@ -119,6 +119,30 @@ export class SyncManager {
   }
 
   /**
+   * 获取最后上传的 profile hash（用于外部去重判断）
+   */
+  public getLastUploadedHash(): string | null {
+    return this.lastLocalProfileHash;
+  }
+
+  /**
+   * 更新前台服务通知文本（自动附加时间戳）
+   */
+  public updateForegroundNotification(text: string): void {
+    if (Platform.OS !== 'android') return;
+    const now = new Date();
+    const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+    const content = `${text}\n${time}`;
+    import('foreground-service')
+      .then((ForegroundService) => {
+        ForegroundService.updateNotification(content);
+      })
+      .catch(() => {
+        // foreground service module not available
+      });
+  }
+
+  /**
    * 创建 API 客户端
    */
   private createAPIClient(config: ServerConfig): ISyncClipboardAPI {
@@ -622,6 +646,7 @@ export class SyncManager {
       if (result.success && !result.skipped && Platform.OS === 'android') {
         const preview = this.getContentPreview(content);
         ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
+        this.updateForegroundNotification(`已上传: ${preview}`);
       }
     };
     this.clipboardMonitor.addCallback(this.realtimeSyncCallback);

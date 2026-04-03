@@ -118,6 +118,7 @@ class SmsCodeService {
       if (result.success && !result.skipped) {
         console.log(`[SmsCodeService] Verification code uploaded: ${code}`);
         ToastAndroid.show(`已上传验证码: ${code}`, ToastAndroid.SHORT);
+        syncManager.updateForegroundNotification(`已上传验证码: ${code}`);
       } else if (result.skipped) {
         console.log(`[SmsCodeService] Upload skipped (already synced): ${code}`);
       } else {

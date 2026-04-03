@@ -96,6 +96,9 @@ export const SettingsScreen = () => {
   const [localSmsForwardingEnabled, setLocalSmsForwardingEnabled] = useState(
     config?.enableSmsForwarding ?? false
   );
+  const [localForegroundNotification, setLocalForegroundNotification] = useState(
+    config?.enableForegroundNotification ?? true
+  );
   const [localDebugBgTestEnabled, setLocalDebugBgTestEnabled] = useState(false);
   const [lastBgTestDuration, setLastBgTestDuration] = useState<string>('无记录');
   const [localDebugOverlayVisible, setLocalDebugOverlayVisible] = useState(
@@ -159,6 +162,10 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalSmsForwardingEnabled(config?.enableSmsForwarding ?? false);
   }, [config?.enableSmsForwarding]);
+
+  useEffect(() => {
+    setLocalForegroundNotification(config?.enableForegroundNotification ?? true);
+  }, [config?.enableForegroundNotification]);
 
   // 加载上次后台测试持续时长
   useEffect(() => {
@@ -433,22 +440,14 @@ export const SettingsScreen = () => {
   const handleToggleSmsForwarding = async (enabled: boolean) => {
     if (enabled && Platform.OS === 'android') {
       const { PermissionsAndroid } = require('react-native');
-      const granted = await PermissionsAndroid.check(
-        PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
-      );
+      const granted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS);
       if (!granted) {
-        const result = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.RECEIVE_SMS
-        );
+        const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS);
         if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert(
-            '需要短信权限',
-            '自动上传验证码需要短信接收权限，请在系统设置中允许',
-            [
-              { text: '取消', style: 'cancel' },
-              { text: '前往设置', onPress: () => Linking.openSettings() },
-            ]
-          );
+          Alert.alert('需要短信权限', '自动上传验证码需要短信接收权限，请在系统设置中允许', [
+            { text: '取消', style: 'cancel' },
+            { text: '前往设置', onPress: () => Linking.openSettings() },
+          ]);
           return;
         }
       }
@@ -460,6 +459,36 @@ export const SettingsScreen = () => {
       showMessage(enabled ? '已启用自动上传短信验证码' : '已禁用自动上传短信验证码', 'success');
     } catch (error: unknown) {
       setLocalSmsForwardingEnabled(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
+  // 处理切换前台服务常驻通知
+  const handleToggleForegroundNotification = async (enabled: boolean) => {
+    if (!enabled) {
+      Alert.alert('关闭常驻通知', '关闭常驻通知会降低后台服务稳定性，系统可能随时终止后台任务。', [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确认关闭',
+          onPress: async () => {
+            setLocalForegroundNotification(false);
+            try {
+              await updateConfig({ enableForegroundNotification: false });
+            } catch (error: unknown) {
+              setLocalForegroundNotification(true);
+              showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+            }
+          },
+        },
+      ]);
+      return;
+    }
+
+    setLocalForegroundNotification(true);
+    try {
+      await updateConfig({ enableForegroundNotification: true });
+    } catch (error: unknown) {
+      setLocalForegroundNotification(false);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
@@ -1115,6 +1144,35 @@ export const SettingsScreen = () => {
                 />
               </View>
 
+              {/* 后台同步 */}
+              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+                <View style={styles.settingInfo}>
+                  <Text
+                    style={[
+                      styles.settingLabel,
+                      {
+                        color: localBackgroundTasksEnabled
+                          ? theme.colors.text
+                          : theme.colors.textTertiary,
+                      },
+                    ]}
+                  >
+                    后台服务常驻通知
+                  </Text>
+                </View>
+                <Switch
+                  value={localBackgroundTasksEnabled && localForegroundNotification}
+                  onValueChange={handleToggleForegroundNotification}
+                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                  thumbColor={
+                    localBackgroundTasksEnabled && localForegroundNotification
+                      ? theme.colors.surface
+                      : theme.colors.textTertiary
+                  }
+                  disabled={!localBackgroundTasksEnabled}
+                />
+              </View>
+
               <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
                 <View style={styles.settingInfo}>
                   <Text
@@ -1231,7 +1289,12 @@ export const SettingsScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={[Platform.OS === 'android' ? styles.settingRow : styles.settingRowNoBorder, Platform.OS === 'android' && { borderBottomColor: theme.colors.divider }]}>
+            <View
+              style={[
+                Platform.OS === 'android' ? styles.settingRow : styles.settingRowNoBorder,
+                Platform.OS === 'android' && { borderBottomColor: theme.colors.divider },
+              ]}
+            >
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   添加桌面快捷方式：上传
