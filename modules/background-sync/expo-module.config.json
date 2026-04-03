@@ -1,7 +1,0 @@
-{
-  "platforms": ["android"],
-  "name": "background-sync",
-  "android": {
-    "modules": ["expo.modules.backgroundsync.BackgroundSyncModule"]
-  }
-}

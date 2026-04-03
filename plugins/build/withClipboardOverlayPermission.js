@@ -10,9 +10,7 @@ function addOverlayPermission(androidManifest) {
     if (!manifest['uses-permission']) {
         manifest['uses-permission'] = [];
     }
-    const requiredPermissions = [
-        'android.permission.SYSTEM_ALERT_WINDOW',
-    ];
+    const requiredPermissions = ['android.permission.SYSTEM_ALERT_WINDOW'];
     for (const perm of requiredPermissions) {
         const exists = manifest['uses-permission'].some((p) => p.$?.['android:name'] === perm);
         if (!exists) {
