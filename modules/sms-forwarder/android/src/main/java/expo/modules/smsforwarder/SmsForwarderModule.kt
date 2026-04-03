@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.os.Build
 import android.provider.Telephony
 import expo.modules.kotlin.modules.Module
@@ -18,6 +19,34 @@ class SmsForwarderModule : Module() {
         Name("SmsForwarderModule")
 
         Events("onSmsReceived")
+
+        Function("readRecentSms") { count: Int ->
+            val context = appContext.reactContext ?: return@Function emptyList<Map<String, String>>()
+            val messages = mutableListOf<Map<String, String>>()
+
+            val cursor = context.contentResolver.query(
+                Uri.parse("content://sms"),
+                arrayOf("address", "body", "date"),
+                null,
+                null,
+                "date DESC"
+            )
+
+            cursor?.use {
+                val addressIdx = it.getColumnIndexOrThrow("address")
+                val bodyIdx = it.getColumnIndexOrThrow("body")
+                var read = 0
+                while (it.moveToNext() && read < count) {
+                    messages.add(mapOf(
+                        "from" to (it.getString(addressIdx) ?: ""),
+                        "body" to (it.getString(bodyIdx) ?: "")
+                    ))
+                    read++
+                }
+            }
+
+            messages
+        }
 
         Function("startListening") {
             if (listening) return@Function true

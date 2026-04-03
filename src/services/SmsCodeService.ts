@@ -3,10 +3,11 @@
  * 短信验证码服务 - 监听短信，提取验证码并上传到服务器
  */
 
-import { Platform } from 'react-native';
+import { Platform, ToastAndroid } from 'react-native';
 import type { EventSubscription } from 'expo-modules-core';
 import { SyncManager } from './SyncManager';
 import { calculateTextHash } from '@/utils/hash';
+import { useSettingsStore } from '@/stores';
 import type { ClipboardContent } from '@/types/clipboard';
 
 // 验证码正则表达式
@@ -76,6 +77,11 @@ class SmsCodeService {
     const code = this.extractVerificationCode(body);
     if (!code) {
       console.log('[SmsCodeService] No verification code found in SMS');
+      const debugSmsNotify = useSettingsStore.getState().config?.debugSmsNotify;
+      if (debugSmsNotify) {
+        const preview = body.length > 30 ? body.slice(0, 30) + '…' : body;
+        ToastAndroid.show(`短信不含验证码: ${preview}`, ToastAndroid.SHORT);
+      }
       return;
     }
 
@@ -101,6 +107,7 @@ class SmsCodeService {
 
       await apiClient.putContent(content);
       console.log(`[SmsCodeService] Verification code uploaded: ${code}`);
+      ToastAndroid.show(`已上传验证码: ${code}`, ToastAndroid.SHORT);
     } catch (error) {
       console.error('[SmsCodeService] Failed to upload verification code:', error);
     }

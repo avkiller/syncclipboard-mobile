@@ -10,7 +10,10 @@ function addSmsPermission(androidManifest) {
     if (!manifest['uses-permission']) {
         manifest['uses-permission'] = [];
     }
-    const requiredPermissions = ['android.permission.RECEIVE_SMS'];
+    const requiredPermissions = [
+        'android.permission.RECEIVE_SMS',
+        'android.permission.READ_SMS',
+    ];
     for (const perm of requiredPermissions) {
         const exists = manifest['uses-permission'].some((p) => p.$?.['android:name'] === perm);
         if (!exists) {

@@ -15,6 +15,7 @@ import {
   Alert,
   Linking,
   Platform,
+  Modal,
 } from 'react-native';
 import { APP_VERSION } from '@/constants';
 import { Paths, Directory } from 'expo-file-system';
@@ -38,6 +39,7 @@ import {
 } from '@/services';
 import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
+import { getSmsCodeService } from '@/services/SmsCodeService';
 
 export const SettingsScreen = () => {
   const { theme, themeMode, setThemeMode } = useTheme();
@@ -100,6 +102,9 @@ export const SettingsScreen = () => {
     config?.debugOverlayVisible ?? false
   );
   const [localDebugUrlScheme, setLocalDebugUrlScheme] = useState(config?.debugUrlScheme ?? false);
+  const [showSmsTestModal, setShowSmsTestModal] = useState(false);
+  const [smsTestInput, setSmsTestInput] = useState('');
+  const [localDebugSmsNotify, setLocalDebugSmsNotify] = useState(config?.debugSmsNotify ?? false);
   const [showLogLevelMenu, setShowLogLevelMenu] = useState(false);
 
   // 更新检查状态
@@ -622,6 +627,28 @@ export const SettingsScreen = () => {
     }
   };
 
+  // 测试验证码短信提取
+  const handleTestSmsCode = () => {
+    const smsService = getSmsCodeService();
+    const code = smsService.extractVerificationCode(smsTestInput);
+    if (code) {
+      Alert.alert('提取成功', `验证码: ${code}`);
+    } else {
+      Alert.alert('提取失败', '未能从输入文本中提取到验证码');
+    }
+  };
+
+  // 处理切换调试短信提醒
+  const handleToggleDebugSmsNotify = async (enabled: boolean) => {
+    setLocalDebugSmsNotify(enabled);
+    try {
+      await updateConfig({ debugSmsNotify: enabled });
+    } catch (error: unknown) {
+      setLocalDebugSmsNotify(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
   // 处理切换自动检查更新
   const handleToggleAutoCheckUpdate = async (enabled: boolean) => {
     setLocalAutoCheckUpdateEnabled(enabled);
@@ -835,6 +862,15 @@ export const SettingsScreen = () => {
   const handleAddUploadShortcut = async () => {
     try {
       await ShortcutService.addUploadShortcut();
+    } catch (error: unknown) {
+      showMessage(error instanceof Error ? error.message : '添加失败', 'error');
+    }
+  };
+
+  // 处理添加上传验证码快捷方式
+  const handleAddUploadSmsCodeShortcut = async () => {
+    try {
+      await ShortcutService.addUploadSmsCodeShortcut();
     } catch (error: unknown) {
       showMessage(error instanceof Error ? error.message : '添加失败', 'error');
     }
@@ -1197,7 +1233,7 @@ export const SettingsScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.settingRow}>
+            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   添加桌面快捷方式：上传
@@ -1210,6 +1246,22 @@ export const SettingsScreen = () => {
                 <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>添加</Text>
               </TouchableOpacity>
             </View>
+
+            {Platform.OS === 'android' && (
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    添加桌面快捷方式：上传验证码
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+                  onPress={handleAddUploadSmsCodeShortcut}
+                >
+                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>添加</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
 
@@ -1618,7 +1670,13 @@ export const SettingsScreen = () => {
 
             {localDebugModeEnabled && (
               <View
-                style={[styles.settingRowNoBorder, { borderBottomColor: theme.colors.divider }]}
+                style={[
+                  styles.settingRowNoBorder,
+                  {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: theme.colors.divider,
+                  },
+                ]}
               >
                 <View style={styles.settingInfo}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
@@ -1633,6 +1691,46 @@ export const SettingsScreen = () => {
                     localDebugUrlScheme ? theme.colors.surface : theme.colors.textTertiary
                   }
                 />
+              </View>
+            )}
+
+            {localDebugModeEnabled && (
+              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    提醒非验证码类短信
+                  </Text>
+                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                    收到非验证码短信时显示 Toast
+                  </Text>
+                </View>
+                <Switch
+                  value={localDebugSmsNotify}
+                  onValueChange={handleToggleDebugSmsNotify}
+                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                  thumbColor={
+                    localDebugSmsNotify ? theme.colors.surface : theme.colors.textTertiary
+                  }
+                />
+              </View>
+            )}
+
+            {localDebugModeEnabled && (
+              <View style={styles.settingRowNoBorder}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    测试验证码短信
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+                  onPress={() => {
+                    setSmsTestInput('');
+                    setShowSmsTestModal(true);
+                  }}
+                >
+                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>测试</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -1652,6 +1750,57 @@ export const SettingsScreen = () => {
         initialConfig={editingServerIndex !== null ? servers[editingServerIndex] : undefined}
         isEditing={editingServerIndex !== null}
       />
+
+      {/* 测试验证码短信模态框 */}
+      <Modal
+        visible={showSmsTestModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSmsTestModal(false)}
+      >
+        <View style={[styles.smsTestModalOverlay, { backgroundColor: theme.colors.overlay }]}>
+          <View style={[styles.smsTestModalContent, { backgroundColor: theme.colors.surface }]}>
+            <Text style={[styles.smsTestModalTitle, { color: theme.colors.text }]}>
+              测试验证码短信
+            </Text>
+            <TextInput
+              style={[
+                styles.smsTestModalInput,
+                {
+                  color: theme.colors.text,
+                  borderColor: theme.colors.divider,
+                  backgroundColor: theme.colors.background,
+                },
+              ]}
+              placeholder="输入短信内容..."
+              placeholderTextColor={theme.colors.textTertiary}
+              value={smsTestInput}
+              onChangeText={setSmsTestInput}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <View style={styles.smsTestModalButtons}>
+              <TouchableOpacity
+                style={[styles.smsTestModalButton, { backgroundColor: theme.colors.divider }]}
+                onPress={() => setShowSmsTestModal(false)}
+              >
+                <Text style={[styles.smsTestModalButtonText, { color: theme.colors.text }]}>
+                  取消
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.smsTestModalButton, { backgroundColor: theme.colors.primary }]}
+                onPress={handleTestSmsCode}
+              >
+                <Text style={[styles.smsTestModalButtonText, { color: theme.colors.white }]}>
+                  测试
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -1890,6 +2039,44 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   actionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  smsTestModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  smsTestModalContent: {
+    width: '100%',
+    borderRadius: 12,
+    padding: 20,
+  },
+  smsTestModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  smsTestModalInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    minHeight: 100,
+    marginBottom: 16,
+  },
+  smsTestModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  smsTestModalButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  smsTestModalButtonText: {
     fontSize: 14,
     fontWeight: '600',
   },

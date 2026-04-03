@@ -29,6 +29,12 @@ class ShortcutModule : Module() {
         private const val UPLOAD_URL = "syncclipboard://quick-upload"
         private const val UPLOAD_ICON_RES = "ic_tile_upload"
         private const val UPLOAD_BG_COLOR = "#007AFF"
+
+        private const val UPLOAD_SMS_CODE_SHORTCUT_ID = "shortcut_upload_sms_code"
+        private const val UPLOAD_SMS_CODE_LABEL = "上传验证码"
+        private const val UPLOAD_SMS_CODE_URL = "syncclipboard://quick-upload-sms-code"
+        private const val UPLOAD_SMS_CODE_ICON_RES = "ic_tile_upload"
+        private const val UPLOAD_SMS_CODE_BG_COLOR = "#34C759"
     }
 
     override fun definition() = ModuleDefinition {
@@ -42,6 +48,10 @@ class ShortcutModule : Module() {
             requestPinShortcutInternal(UPLOAD_SHORTCUT_ID, UPLOAD_LABEL, UPLOAD_URL, UPLOAD_ICON_RES, UPLOAD_BG_COLOR, promise)
         }
 
+        AsyncFunction("requestPinUploadSmsCodeShortcut") { promise: Promise ->
+            requestPinShortcutInternal(UPLOAD_SMS_CODE_SHORTCUT_ID, UPLOAD_SMS_CODE_LABEL, UPLOAD_SMS_CODE_URL, UPLOAD_SMS_CODE_ICON_RES, UPLOAD_SMS_CODE_BG_COLOR, promise)
+        }
+
         Function("setDynamicShortcuts") {
             try {
                 val reactContext = appContext.reactContext ?: return@Function false
@@ -50,8 +60,9 @@ class ShortcutModule : Module() {
 
                 val downloadShortcut = createShortcutInfo(reactContext, DOWNLOAD_SHORTCUT_ID, DOWNLOAD_LABEL, DOWNLOAD_URL, DOWNLOAD_ICON_RES, DOWNLOAD_BG_COLOR)
                 val uploadShortcut = createShortcutInfo(reactContext, UPLOAD_SHORTCUT_ID, UPLOAD_LABEL, UPLOAD_URL, UPLOAD_ICON_RES, UPLOAD_BG_COLOR)
+                val uploadSmsCodeShortcut = createShortcutInfo(reactContext, UPLOAD_SMS_CODE_SHORTCUT_ID, UPLOAD_SMS_CODE_LABEL, UPLOAD_SMS_CODE_URL, UPLOAD_SMS_CODE_ICON_RES, UPLOAD_SMS_CODE_BG_COLOR)
 
-                shortcutManager.dynamicShortcuts = listOf(uploadShortcut, downloadShortcut)
+                shortcutManager.dynamicShortcuts = listOf(uploadSmsCodeShortcut, uploadShortcut, downloadShortcut)
                 true
             } catch (e: Exception) {
                 false

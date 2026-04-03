@@ -106,6 +106,9 @@ export interface AppConfig {
 
   /** 调试时显示 URL Scheme 调用（Toast 通知） */
   debugUrlScheme: boolean;
+
+  /** 调试时提醒非验证码类短信 */
+  debugSmsNotify: boolean;
 }
 
 /**
@@ -281,6 +284,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   enableSmsForwarding: false, // 默认关闭自动上传短信验证码
   debugOverlayVisible: false, // 默认不显示悬浮窗
   debugUrlScheme: false, // 默认不显示 URL Scheme 调用
+  debugSmsNotify: false, // 默认不提醒非验证码类短信
 };
 
 /**
