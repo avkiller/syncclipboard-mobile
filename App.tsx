@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { QuickTileLoadingScreen } from './src/screens/QuickTileLoadingScreen';
-import { QuickSmsCodeUploadScreen } from './src/screens/QuickSmsCodeUploadScreen';
 import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
 import { SyncDirection } from './src/types/sync';
 import { useSettingsStore } from './src/stores';
@@ -14,18 +13,14 @@ import { setDynamicShortcuts } from 'shortcut';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
 const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';
-const QUICK_UPLOAD_SMS_CODE_URL = 'syncclipboard://quick-upload-sms-code';
 
 function parseQuickTileUrl(url: string | null): {
   isQuickTile: boolean;
   fromForeground: boolean;
   direction: SyncDirection;
-  isSmsCode?: boolean;
 } {
   if (!url) return { isQuickTile: false, fromForeground: false, direction: SyncDirection.Download };
   const fromForeground = url.includes('fg=1');
-  if (url.startsWith(QUICK_UPLOAD_SMS_CODE_URL))
-    return { isQuickTile: true, fromForeground, direction: SyncDirection.Upload, isSmsCode: true };
   // Check upload first — its URL is a superset of the download prefix
   if (url.startsWith(QUICK_UPLOAD_URL))
     return { isQuickTile: true, fromForeground, direction: SyncDirection.Upload };
@@ -43,7 +38,7 @@ function isShareIntentUrl(url: string | null): boolean {
   }
 }
 
-type AppMode = 'checking' | 'home' | 'quick_tile_loading' | 'quick_sms_upload' | 'share_receive';
+type AppMode = 'checking' | 'home' | 'quick_tile_loading' | 'share_receive';
 
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('checking');
@@ -74,15 +69,11 @@ export default function App() {
         setAppMode('share_receive');
         return;
       }
-      const { isQuickTile, fromForeground, direction, isSmsCode } = parseQuickTileUrl(url);
+      const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
       if (isQuickTile) {
         setShouldExitAfterSync(!fromForeground);
-        if (isSmsCode) {
-          setAppMode('quick_sms_upload');
-        } else {
-          setSyncDirection(direction);
-          setAppMode('quick_tile_loading');
-        }
+        setSyncDirection(direction);
+        setAppMode('quick_tile_loading');
         return;
       }
       setAppMode('home');
@@ -97,15 +88,11 @@ export default function App() {
         setAppMode('share_receive');
         return;
       }
-      const { isQuickTile, fromForeground, direction, isSmsCode } = parseQuickTileUrl(url);
+      const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
       if (isQuickTile) {
         setShouldExitAfterSync(!fromForeground);
-        if (isSmsCode) {
-          setAppMode('quick_sms_upload');
-        } else {
-          setSyncDirection(direction);
-          setAppMode('quick_tile_loading');
-        }
+        setSyncDirection(direction);
+        setAppMode('quick_tile_loading');
       }
     });
 
@@ -121,15 +108,6 @@ export default function App() {
             onComplete={() => {
               setAppMode('home');
               BackHandler.exitApp();
-            }}
-          />
-        ) : appMode === 'quick_sms_upload' ? (
-          <QuickSmsCodeUploadScreen
-            onComplete={() => {
-              setAppMode('home');
-              if (shouldExitAfterSync) {
-                BackHandler.exitApp();
-              }
             }}
           />
         ) : appMode === 'quick_tile_loading' ? (

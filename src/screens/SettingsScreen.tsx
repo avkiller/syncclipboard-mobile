@@ -328,7 +328,7 @@ export const SettingsScreen = () => {
     if (enabled) {
       Alert.alert(
         '开启后台任务',
-        '启用后台任务后，应用将在后台持续运行相关服务，大幅增加电量消耗。\n\n建议在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，减少系统关闭后台任务的可能性。',
+        '启用后台任务后，应用将在后台持续运行相关服务，大幅增加电量消耗。\n\n建议在系统设置中将 SyncClipboard 的电池优化设为「不受限制」，并在多任务界面锁定 SyncClipboard，减少系统关闭后台任务的概率。',
         [
           { text: '取消', style: 'cancel' },
           {
@@ -901,15 +901,6 @@ export const SettingsScreen = () => {
     }
   };
 
-  // 处理添加上传验证码快捷方式
-  const handleAddUploadSmsCodeShortcut = async () => {
-    try {
-      await ShortcutService.addUploadSmsCodeShortcut();
-    } catch (error: unknown) {
-      showMessage(error instanceof Error ? error.message : '添加失败', 'error');
-    }
-  };
-
   // 格式化文件大小
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 B';
@@ -1293,12 +1284,7 @@ export const SettingsScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View
-              style={[
-                Platform.OS === 'android' ? styles.settingRow : styles.settingRowNoBorder,
-                Platform.OS === 'android' && { borderBottomColor: theme.colors.divider },
-              ]}
-            >
+            <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
                 <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
                   添加桌面快捷方式：上传
@@ -1311,22 +1297,6 @@ export const SettingsScreen = () => {
                 <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>添加</Text>
               </TouchableOpacity>
             </View>
-
-            {Platform.OS === 'android' && (
-              <View style={styles.settingRowNoBorder}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    添加桌面快捷方式：上传验证码
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-                  onPress={handleAddUploadSmsCodeShortcut}
-                >
-                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>添加</Text>
-                </TouchableOpacity>
-              </View>
-            )}
           </View>
         </View>
 

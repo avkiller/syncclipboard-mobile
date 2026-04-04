@@ -4,7 +4,6 @@ import { requireNativeModule } from 'expo-modules-core';
 export interface ShortcutModuleType {
   requestPinDownloadShortcut(): Promise<boolean>;
   requestPinUploadShortcut(): Promise<boolean>;
-  requestPinUploadSmsCodeShortcut(): Promise<boolean>;
   setDynamicShortcuts(): boolean;
 }
 
@@ -34,13 +33,6 @@ export async function requestPinUploadShortcut(): Promise<boolean> {
     throw new Error('ShortcutModule is only available on Android');
   }
   return getNativeModule().requestPinUploadShortcut();
-}
-
-export async function requestPinUploadSmsCodeShortcut(): Promise<boolean> {
-  if (Platform.OS !== 'android') {
-    throw new Error('ShortcutModule is only available on Android');
-  }
-  return getNativeModule().requestPinUploadSmsCodeShortcut();
 }
 
 export function setDynamicShortcuts(): boolean {

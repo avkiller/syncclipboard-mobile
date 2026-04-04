@@ -2,7 +2,6 @@ import { Platform } from 'react-native';
 import {
   requestPinDownloadShortcut,
   requestPinUploadShortcut,
-  requestPinUploadSmsCodeShortcut,
   isShortcutModuleAvailable,
 } from 'shortcut';
 
@@ -29,19 +28,6 @@ export const ShortcutService = {
     }
     return requestPinUploadShortcut().catch((error) => {
       console.error('ShortcutModule addUploadShortcut error:', error);
-      throw error;
-    });
-  },
-
-  addUploadSmsCodeShortcut(): Promise<boolean> {
-    if (Platform.OS !== 'android') {
-      return Promise.reject(new Error('Home-screen shortcuts are only supported on Android'));
-    }
-    if (!isShortcutModuleAvailable) {
-      return Promise.reject(new Error('ShortcutModule is not available'));
-    }
-    return requestPinUploadSmsCodeShortcut().catch((error) => {
-      console.error('ShortcutModule addUploadSmsCodeShortcut error:', error);
       throw error;
     });
   },
