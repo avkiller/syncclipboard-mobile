@@ -156,7 +156,7 @@ export abstract class APIClient {
       (response) => {
         // 日志：响应信息
         console.log(`[API] Response ${response.status} ${response.config.url}`);
-        
+
         return response;
       },
       (error) => {
