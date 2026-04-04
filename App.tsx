@@ -1,13 +1,5 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import {
-  StyleSheet,
-  Linking,
-  BackHandler,
-  ToastAndroid,
-  StatusBar,
-  View,
-  Platform,
-} from 'react-native';
+import { StyleSheet, Linking, ToastAndroid, StatusBar, View, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
