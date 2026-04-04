@@ -1603,9 +1603,7 @@ export const SettingsScreen = () => {
                       Linking.openURL('https://github.com/Jeric-X/syncclipboard-mobile')
                     }
                   >
-                    <Text
-                      style={[styles.updateButtonText, { color: theme.colors.white }]}
-                    >
+                    <Text style={[styles.updateButtonText, { color: theme.colors.white }]}>
                       GitHub
                     </Text>
                   </TouchableOpacity>

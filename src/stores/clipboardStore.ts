@@ -79,11 +79,16 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     try {
       const content = await clipboardManager.getClipboardContent();
 
+      // 剪贴板读取返回空时（如 Android 后台→前台瞬间的权限延迟），保留已有内容
+      if (!content) {
+        set({ isLoading: false });
+        return;
+      }
+
       // 如果内容未变化（localClipboardHash 相同），跳过状态更新，避免 Image 组件因
       // key 中的 timestamp 变化而重新挂载导致闪烁（切换前后台场景）
       const currentContent = get().currentContent;
       if (
-        content &&
         currentContent &&
         content.localClipboardHash &&
         currentContent.localClipboardHash &&
@@ -96,21 +101,19 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
       set({ currentContent: content, isLoading: false });
 
       // 使用持久化的 hash 判断是否需要添加历史记录
-      if (content) {
-        const changed = await clipboardMonitor.checkAndUpdateLastContent(content);
-        if (changed) {
-          const historyItem = createDefaultClipboardItem({
-            type: content.type,
-            text: content.text || '',
-            profileHash: content.profileHash || '',
-            hasData: !!(content.fileName || content.fileUri),
-            dataName: content.fileName,
-            size: content.fileSize,
-            timestamp: content.timestamp || Date.now(),
-            fileUri: content.fileUri,
-          });
-          await useHistoryStore.getState().addItem(historyItem);
-        }
+      const changed = await clipboardMonitor.checkAndUpdateLastContent(content);
+      if (changed) {
+        const historyItem = createDefaultClipboardItem({
+          type: content.type,
+          text: content.text || '',
+          profileHash: content.profileHash || '',
+          hasData: !!(content.fileName || content.fileUri),
+          dataName: content.fileName,
+          size: content.fileSize,
+          timestamp: content.timestamp || Date.now(),
+          fileUri: content.fileUri,
+        });
+        await useHistoryStore.getState().addItem(historyItem);
       }
     } catch (error) {
       const errorMessage =

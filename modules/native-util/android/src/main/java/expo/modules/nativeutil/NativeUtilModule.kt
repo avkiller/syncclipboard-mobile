@@ -45,6 +45,11 @@ class NativeUtilModule : Module() {
 
         Events(EVENT_HASH_PROGRESS, EVENT_UPLOAD_PROGRESS, EVENT_DOWNLOAD_PROGRESS, EVENT_ZIP_PROGRESS)
 
+        Function("moveTaskToBack") {
+            appContext.currentActivity?.moveTaskToBack(true) ?: false
+            true
+        }
+
         Function("startCalculateFileHash") { fileUri: String ->
             val jobId = UUID.randomUUID().toString()
             val cancelFlag = AtomicBoolean(false)

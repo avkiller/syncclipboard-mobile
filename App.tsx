@@ -1,5 +1,13 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet, Linking, BackHandler, ToastAndroid, StatusBar } from 'react-native';
+import {
+  StyleSheet,
+  Linking,
+  BackHandler,
+  ToastAndroid,
+  StatusBar,
+  View,
+  Platform,
+} from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
@@ -10,6 +18,7 @@ import { useSettingsStore } from './src/stores';
 import { initLogger } from './src/services/Logger';
 import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
+import { moveTaskToBack } from 'native-util';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
 const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';
@@ -38,12 +47,15 @@ function isShareIntentUrl(url: string | null): boolean {
   }
 }
 
-type AppMode = 'checking' | 'home' | 'quick_tile_loading' | 'share_receive';
+type AppMode = 'checking' | 'home' | 'share_receive';
 
 export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('checking');
-  const [shouldExitAfterSync, setShouldExitAfterSync] = useState(false);
-  const [syncDirection, setSyncDirection] = useState<SyncDirection>(SyncDirection.Download);
+  // 快速操作覆盖层：始终以 overlay 形式显示，不卸载 AppNavigator/HomeScreen
+  const [quickActionOverlay, setQuickActionOverlay] = useState<{
+    direction: SyncDirection;
+    exitAfterSync: boolean;
+  } | null>(null);
   const { config, loadConfig, isLoaded } = useSettingsStore();
 
   useEffect(() => {
@@ -56,6 +68,28 @@ export default function App() {
       loadConfig();
     }
   }, [isLoaded, loadConfig]);
+
+  // 确保前台服务在冷启动时也能启动（快速操作不经过 HomeScreen）
+  useEffect(() => {
+    if (!isLoaded || Platform.OS !== 'android') return;
+
+    const shouldRun =
+      config?.enableBackgroundTasks &&
+      config?.enableForegroundNotification &&
+      (config?.enableBackgroundSync || config?.enableSmsForwarding);
+
+    if (shouldRun) {
+      import('foreground-service').then((ForegroundService) => {
+        ForegroundService.startService();
+      });
+    }
+  }, [
+    isLoaded,
+    config?.enableBackgroundTasks,
+    config?.enableForegroundNotification,
+    config?.enableBackgroundSync,
+    config?.enableSmsForwarding,
+  ]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -70,13 +104,12 @@ export default function App() {
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
-      if (isQuickTile) {
-        setShouldExitAfterSync(!fromForeground);
-        setSyncDirection(direction);
-        setAppMode('quick_tile_loading');
-        return;
-      }
+      // 始终进入 home 模式（挂载 AppNavigator/HomeScreen 以启动后台任务）
       setAppMode('home');
+      if (isQuickTile) {
+        // fg=1 完成后留在 app，fg=0/无fg 完成后退出
+        setQuickActionOverlay({ direction, exitAfterSync: !fromForeground });
+      }
     });
 
     // Hot start: app already running, receives URL deep link event
@@ -90,9 +123,8 @@ export default function App() {
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
       if (isQuickTile) {
-        setShouldExitAfterSync(!fromForeground);
-        setSyncDirection(direction);
-        setAppMode('quick_tile_loading');
+        // fg=1 完成后留在 app，fg=0/无fg 完成后退出
+        setQuickActionOverlay({ direction, exitAfterSync: !fromForeground });
       }
     });
 
@@ -110,18 +142,23 @@ export default function App() {
               BackHandler.exitApp();
             }}
           />
-        ) : appMode === 'quick_tile_loading' ? (
-          <QuickTileLoadingScreen
-            direction={syncDirection}
-            onLoadingComplete={() => {
-              setAppMode('home');
-              if (shouldExitAfterSync) {
-                BackHandler.exitApp();
-              }
-            }}
-          />
         ) : (
           <AppNavigator />
+        )}
+        {quickActionOverlay && (
+          <View style={StyleSheet.absoluteFill}>
+            <QuickTileLoadingScreen
+              direction={quickActionOverlay.direction}
+              onLoadingComplete={() => {
+                const shouldExit = quickActionOverlay.exitAfterSync;
+                setQuickActionOverlay(null);
+                if (shouldExit) {
+                  // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
+                  moveTaskToBack();
+                }
+              }}
+            />
+          </View>
         )}
       </ThemeProvider>
     </GestureHandlerRootView>

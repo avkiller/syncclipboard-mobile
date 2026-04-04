@@ -875,9 +875,8 @@ export function HomeScreen() {
 
     return () => {
       stopSub?.remove();
-      import('foreground-service').then((ForegroundService) => {
-        ForegroundService.stopService();
-      });
+      // 注意：不在 unmount 时停止前台服务，避免快速操作导致后台任务中断
+      // 前台服务的停止由 config 变化驱动（shouldRun 为 false 时调用 stopService）
     };
   }, [
     config?.enableBackgroundTasks,

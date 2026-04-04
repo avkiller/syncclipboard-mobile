@@ -35,6 +35,7 @@ export interface ProgressInfo {
 }
 
 export interface NativeUtilModuleType {
+  moveTaskToBack(): boolean;
   startCalculateFileHash(fileUri: string): string;
   waitForJob(jobId: string): Promise<string>;
   cancelJob(jobId: string): Promise<void>;
@@ -58,6 +59,14 @@ const NativeUtilModule: NativeUtilModuleType = requireNativeModule('NativeUtilMo
 
 export const isNativeModuleAvailable = Platform.OS === 'android';
 export const isNativeHashModuleAvailable = Platform.OS === 'android';
+
+/**
+ * 将应用移到后台，保持 Activity 存活（不同于 BackHandler.exitApp 可能终止 Activity）
+ */
+export function moveTaskToBack(): boolean {
+  if (Platform.OS !== 'android') return false;
+  return NativeUtilModule.moveTaskToBack();
+}
 
 export async function nativeCopyFile(srcUri: string, destUri: string): Promise<void> {
   if (Platform.OS !== 'android') {
