@@ -1558,38 +1558,58 @@ export const SettingsScreen = () => {
                   </Text>
                   <Text style={[styles.infoValue, { color: theme.colors.text }]}>{appVersion}</Text>
                 </View>
-                <TouchableOpacity
-                  style={[
-                    styles.updateButton,
-                    {
-                      backgroundColor: updateAvailable
-                        ? theme.colors.primary
-                        : theme.colors.surface,
-                      borderColor: theme.colors.primary,
-                    },
-                  ]}
-                  onPress={() =>
-                    updateAvailable
-                      ? Linking.openURL('https://github.com/Jeric-X/SyncClipboard/releases')
-                      : runUpdateCheck(true, localUpdateToBetaEnabled)
-                  }
-                  disabled={isCheckingUpdate}
-                >
-                  <Text
+                <View style={styles.versionButtonGroup}>
+                  <TouchableOpacity
                     style={[
-                      styles.updateButtonText,
+                      styles.updateButton,
                       {
-                        color: updateAvailable ? theme.colors.white : theme.colors.primary,
+                        backgroundColor: updateAvailable
+                          ? theme.colors.primary
+                          : theme.colors.surface,
+                        borderColor: theme.colors.primary,
                       },
                     ]}
+                    onPress={() =>
+                      updateAvailable
+                        ? Linking.openURL('https://github.com/Jeric-X/SyncClipboard/releases')
+                        : runUpdateCheck(true, localUpdateToBetaEnabled)
+                    }
+                    disabled={isCheckingUpdate}
                   >
-                    {isCheckingUpdate
-                      ? '检查中...'
-                      : updateAvailable
-                        ? `更新 ${latestVersion}`
-                        : '检查更新'}
-                  </Text>
-                </TouchableOpacity>
+                    <Text
+                      style={[
+                        styles.updateButtonText,
+                        {
+                          color: updateAvailable ? theme.colors.white : theme.colors.primary,
+                        },
+                      ]}
+                    >
+                      {isCheckingUpdate
+                        ? '检查中...'
+                        : updateAvailable
+                          ? `更新 ${latestVersion}`
+                          : '检查更新'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.updateButton,
+                      {
+                        backgroundColor: theme.colors.primary,
+                        borderColor: theme.colors.primary,
+                      },
+                    ]}
+                    onPress={() =>
+                      Linking.openURL('https://github.com/Jeric-X/syncclipboard-mobile')
+                    }
+                  >
+                    <Text
+                      style={[styles.updateButtonText, { color: theme.colors.white }]}
+                    >
+                      GitHub
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
@@ -2002,6 +2022,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  versionButtonGroup: {
+    flexDirection: 'row',
+    gap: 8,
   },
   versionLabelGroup: {
     flexDirection: 'row',
