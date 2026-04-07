@@ -10,10 +10,19 @@ import React, {
   useImperativeHandle,
   useEffect,
   useCallback,
+  useMemo,
   memo,
 } from 'react';
-import { View, Text, StyleSheet, TouchableHighlight, Image, TouchableOpacity } from 'react-native';
-import { Copy, Download, Share, Trash2, ExternalLink } from 'react-native-feather';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableHighlight,
+  Image,
+  TouchableOpacity,
+  Linking,
+} from 'react-native';
+import { Copy, Download, Share, Trash2, ExternalLink, Link2 } from 'react-native-feather';
 import { Ionicons } from '@expo/vector-icons';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, {
@@ -329,6 +338,14 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
 
     const previewText = getPreviewText();
 
+    // 检测文本中的 URL
+    const detectedUrl = useMemo(() => {
+      if (item.type !== 'Text' || !item.text) return null;
+      const urlRegex = /https?:\/\/[^\s<>"'()\]\[{}]+/i;
+      const match = item.text.match(urlRegex);
+      return match ? match[0] : null;
+    }, [item.type, item.text]);
+
     const updateSwipeDeleteState = useCallback(
       (hint: 'default' | 'continue' | 'release', shouldAutoDelete: boolean) => {
         // 只在状态真正变化时更新，避免频繁重渲染导致闪烁
@@ -622,6 +639,17 @@ export const HistoryListItem = forwardRef<HistoryListItemHandle, HistoryListItem
                         size={18}
                         color={theme.colors.primary}
                       />
+                    </TouchableOpacity>
+                  )}
+                  {item.type === 'Text' && detectedUrl && (
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => Linking.openURL(detectedUrl)}
+                      hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                    >
+                      <View style={{ transform: [{ scale: 0.6 }] }}>
+                        <Link2 color={theme.colors.primary} />
+                      </View>
                     </TouchableOpacity>
                   )}
                   {item.type === 'Text' && (

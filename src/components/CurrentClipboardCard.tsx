@@ -3,8 +3,17 @@
  * 当前剪贴板内容卡片
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Share, Image } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  Share,
+  Image,
+  Linking,
+} from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { ClipboardContent } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
@@ -70,6 +79,14 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
     return () => clearInterval(interval);
   }, []);
+
+  // 检测文本中的 URL
+  const detectedUrl = useMemo(() => {
+    if (!clipboard || clipboard.type !== 'Text' || !clipboard.text) return null;
+    const urlRegex = /https?:\/\/[^\s<>"'()\]\[{}]+/i;
+    const match = clipboard.text.match(urlRegex);
+    return match ? match[0] : null;
+  }, [clipboard?.type, clipboard?.text]);
 
   // 分享内容
   const handleShare = async () => {
@@ -341,6 +358,16 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
 
       {/* 按钮区域 */}
       <View style={styles.actionButtons}>
+        {/* 文本中包含 URL：打开链接按钮 */}
+        {clipboard.type === 'Text' && detectedUrl && (
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
+            onPress={() => Linking.openURL(detectedUrl)}
+          >
+            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>打开链接</Text>
+          </TouchableOpacity>
+        )}
+
         {/* 远程 Text 类型：只有在不需要下载时才显示复制按钮 */}
         {isRemote && clipboard.type === 'Text' && !showDownloadButton && (
           <TouchableOpacity
