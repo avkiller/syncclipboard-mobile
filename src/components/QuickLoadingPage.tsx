@@ -13,7 +13,9 @@ import {
   Image,
   TouchableOpacity,
   BackHandler,
+  ScrollView,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressInfo } from 'native-util';
@@ -233,9 +235,14 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
             <Text style={[styles.errorIcon, { color: theme.colors.error }]}>✗</Text>
             <Text style={[styles.statusText, { color: theme.colors.text }]}>{failureText}</Text>
             {errorMessage && (
-              <Text style={[styles.errorDetailText, { color: theme.colors.textTertiary }]}>
-                {errorMessage}
-              </Text>
+              <ScrollView
+                style={[styles.errorDetailScroll, { borderColor: theme.colors.border }]}
+                contentContainerStyle={styles.errorDetailScrollContent}
+              >
+                <Text style={[styles.errorDetailText, { color: theme.colors.textTertiary }]}>
+                  {errorMessage}
+                </Text>
+              </ScrollView>
             )}
             <View style={styles.buttonRow}>
               <TouchableOpacity
@@ -244,6 +251,18 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
               >
                 <Text style={[styles.buttonText, { color: theme.colors.white }]}>重试</Text>
               </TouchableOpacity>
+              {errorMessage && (
+                <TouchableOpacity
+                  style={[
+                    styles.button,
+                    styles.buttonOutline,
+                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                  ]}
+                  onPress={() => Clipboard.setStringAsync(errorMessage)}
+                >
+                  <Text style={[styles.buttonText, { color: theme.colors.text }]}>复制</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[
                   styles.button,
@@ -338,10 +357,19 @@ const styles = StyleSheet.create({
   errorIcon: {
     fontSize: 48,
   },
+  errorDetailScroll: {
+    maxHeight: 200,
+    width: '100%',
+    maxWidth: 280,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  errorDetailScrollContent: {
+    padding: 12,
+  },
   errorDetailText: {
     fontSize: 14,
     textAlign: 'center',
-    maxWidth: 280,
   },
   buttonRow: {
     flexDirection: 'row',

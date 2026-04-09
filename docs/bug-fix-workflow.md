@@ -47,6 +47,7 @@ npx jest src/__tests__/<测试文件>.test.ts --no-coverage
 3. 清理不再需要的 import
 
 **原则**：
+
 - 最小化修改范围，只改必要的代码
 - 不引入不相关的重构或优化
 
@@ -77,11 +78,11 @@ npx tsc --noEmit
 
 当 Bug 逻辑位于以下位置时，需要提取：
 
-| 场景 | 做法 |
-|------|------|
-| React 组件内部的闭包函数 | 提取为 `src/utils/` 下的纯函数 |
+| 场景                     | 做法                                |
+| ------------------------ | ----------------------------------- |
+| React 组件内部的闭包函数 | 提取为 `src/utils/` 下的纯函数      |
 | 依赖全局状态或服务的逻辑 | 通过依赖注入接口传入，测试时用 mock |
-| 多个职责混合在一起 | 仅提取与 Bug 相关的判断逻辑 |
+| 多个职责混合在一起       | 仅提取与 Bug 相关的判断逻辑         |
 
 **提取模板**：
 
@@ -95,10 +96,7 @@ export interface XxxDeps {
 }
 
 // 纯函数，可独立测试
-export async function xxxLogic(
-  input: InputType,
-  deps: XxxDeps
-): Promise<OutputType> {
+export async function xxxLogic(input: InputType, deps: XxxDeps): Promise<OutputType> {
   // 核心逻辑
 }
 ```

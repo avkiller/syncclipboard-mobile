@@ -59,11 +59,12 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
       if (!payload) throw new Error('没有可处理的分享内容');
 
       // 文字分享（text / url 类型，contentUri 为 null）
-      if (!payload.contentUri) {
+      // 或 URL 分享（浏览器分享链接时 contentUri 是 https:// 而非本地文件）
+      if (!payload.contentUri || payload.shareType === 'url') {
         const text = payload.value?.trim() || '';
         if (!text) throw new Error('分享的文字内容为空');
         setLoadingText('正在上传文字…');
-        setPreviewText(text.slice(0, 50));
+        setPreviewText(text.slice(0, 100));
         await uploadTextAndAddToHistory(text, activeServer, { signal });
         clearSharedPayloads();
         return;
