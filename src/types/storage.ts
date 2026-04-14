@@ -115,6 +115,9 @@ export interface AppConfig {
 
   /** 启用前台服务常驻通知 */
   enableForegroundNotification: boolean;
+
+  /** 同步后发送 Toast 通知（上传/下载完成时） */
+  syncToastEnabled: boolean;
 }
 
 /**
@@ -293,6 +296,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   debugUrlScheme: false, // 默认不显示 URL Scheme 调用
   debugSmsNotify: false, // 默认不提醒非验证码类短信
   enableForegroundNotification: true, // 默认启用前台服务常驻通知
+  syncToastEnabled: true, // 默认开启同步 Toast 通知
 };
 
 /**

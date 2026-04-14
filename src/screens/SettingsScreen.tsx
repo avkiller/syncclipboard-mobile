@@ -105,6 +105,9 @@ export const SettingsScreen = () => {
   const [localForegroundNotification, setLocalForegroundNotification] = useState(
     config?.enableForegroundNotification ?? true
   );
+  const [localSyncToastEnabled, setLocalSyncToastEnabled] = useState(
+    config?.syncToastEnabled ?? true
+  );
   const [localDebugOverlayVisible, setLocalDebugOverlayVisible] = useState(
     config?.debugOverlayVisible ?? false
   );
@@ -178,6 +181,10 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalForegroundNotification(config?.enableForegroundNotification ?? true);
   }, [config?.enableForegroundNotification]);
+
+  useEffect(() => {
+    setLocalSyncToastEnabled(config?.syncToastEnabled ?? true);
+  }, [config?.syncToastEnabled]);
 
   // 计算存储大小
   useEffect(() => {
@@ -790,6 +797,17 @@ export const SettingsScreen = () => {
     }
   };
 
+  // 处理切换同步 Toast 通知
+  const handleToggleSyncToast = async (enabled: boolean) => {
+    setLocalSyncToastEnabled(enabled);
+    try {
+      await updateConfig({ syncToastEnabled: enabled });
+    } catch (error: unknown) {
+      setLocalSyncToastEnabled(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
   // 执行更新检查逻辑
   const runUpdateCheck = async (showNoUpdateToast: boolean, includeBeta?: boolean) => {
     setIsCheckingUpdate(true);
@@ -1077,6 +1095,25 @@ export const SettingsScreen = () => {
                     : theme.colors.textTertiary
                 }
                 disabled={activeServer?.type === 'webdav'}
+              />
+            </View>
+
+            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  同步 Toast 通知
+                </Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                  上传/下载完成后显示 Toast 提示
+                </Text>
+              </View>
+              <Switch
+                value={localSyncToastEnabled}
+                onValueChange={handleToggleSyncToast}
+                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                thumbColor={
+                  localSyncToastEnabled ? theme.colors.surface : theme.colors.textTertiary
+                }
               />
             </View>
 

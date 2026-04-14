@@ -143,8 +143,7 @@ export class SyncManager {
     if (colonIdx >= 0) {
       const action = text.slice(0, colonIdx);
       const preview = text.slice(colonIdx + 2);
-      const arrow = action.includes('下载') ? '↓' : '↑';
-      content = `${arrow} ${action}\n${preview}`;
+      content = `${action}\n${preview}`;
     } else {
       content = `SyncClipboard\n${text}`;
     }

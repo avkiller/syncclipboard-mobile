@@ -411,7 +411,11 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     onPress={() => Linking.openURL(detectedUrl)}
                     hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                   >
-                    <Link2 width={ACTION_ICON_SIZE} height={ACTION_ICON_SIZE} color={theme.colors.primary} />
+                    <Link2
+                      width={ACTION_ICON_SIZE}
+                      height={ACTION_ICON_SIZE}
+                      color={theme.colors.primary}
+                    />
                   </TouchableOpacity>
                 )}
                 {item.type === 'Text' && onWordPick && item.text && (
@@ -420,7 +424,11 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     onPress={() => onWordPick(item.text!)}
                     hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                   >
-                    <Scissors width={ACTION_ICON_SIZE} height={ACTION_ICON_SIZE} color={theme.colors.primary} />
+                    <Scissors
+                      width={ACTION_ICON_SIZE}
+                      height={ACTION_ICON_SIZE}
+                      color={theme.colors.primary}
+                    />
                   </TouchableOpacity>
                 )}
                 {item.type === 'Text' && (
@@ -429,7 +437,11 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                     onPress={() => onCopy(item)}
                     hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
                   >
-                    <Copy width={ACTION_ICON_SIZE} height={ACTION_ICON_SIZE} color={theme.colors.primary} />
+                    <Copy
+                      width={ACTION_ICON_SIZE}
+                      height={ACTION_ICON_SIZE}
+                      color={theme.colors.primary}
+                    />
                   </TouchableOpacity>
                 )}
                 {item.type === 'Image' && (

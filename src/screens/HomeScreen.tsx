@@ -166,7 +166,9 @@ export function HomeScreen() {
 
       if (fileUri && fileUri !== remoteContent.fileUri) {
         setRemoteContent((prev) => (prev ? { ...prev, fileUri } : null));
-        showMessage('文件已下载', 'success');
+        if (config?.syncToastEnabled !== false) {
+          showMessage('文件已下载', 'success');
+        }
       }
     };
 
@@ -375,7 +377,9 @@ export function HomeScreen() {
               finalContent.type === 'Text' && finalContent.text
                 ? finalContent.text.trim().replace(/\s+/g, ' ').slice(0, 30)
                 : finalContent.fileName || finalContent.type;
-            ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
+            if (config?.syncToastEnabled !== false) {
+              ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
+            }
             SyncManager.getInstance().updateForegroundNotification(`已下载: ${preview}`);
           }
         } catch (error) {
@@ -741,7 +745,9 @@ export function HomeScreen() {
                   currentContent.type === 'Text' && currentContent.text
                     ? currentContent.text.trim().replace(/\s+/g, ' ').slice(0, 30)
                     : currentContent.fileName || currentContent.type;
-                ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
+                if (config?.syncToastEnabled !== false) {
+                  ToastAndroid.show(`已上传\n${preview}`, ToastAndroid.SHORT);
+                }
                 SyncManager.getInstance().updateForegroundNotification(`已上传: ${preview}`);
               }
             }
