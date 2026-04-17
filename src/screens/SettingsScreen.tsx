@@ -114,7 +114,6 @@ export const SettingsScreen = () => {
   const [localDebugUrlScheme, setLocalDebugUrlScheme] = useState(config?.debugUrlScheme ?? false);
   const [showSmsTestModal, setShowSmsTestModal] = useState(false);
   const [smsTestInput, setSmsTestInput] = useState('');
-  const [localDebugSmsNotify, setLocalDebugSmsNotify] = useState(config?.debugSmsNotify ?? false);
   const [showLogLevelMenu, setShowLogLevelMenu] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [localHideFromRecents, setLocalHideFromRecents] = useState(
@@ -749,17 +748,6 @@ export const SettingsScreen = () => {
     await Clipboard.setStringAsync(statsText);
     setShowStatsModal(false);
     showMessage('已复制统计信息', 'success');
-  };
-
-  // 处理切换调试短信提醒
-  const handleToggleDebugSmsNotify = async (enabled: boolean) => {
-    setLocalDebugSmsNotify(enabled);
-    try {
-      await updateConfig({ debugSmsNotify: enabled });
-    } catch (error: unknown) {
-      setLocalDebugSmsNotify(!enabled);
-      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
-    }
   };
 
   // 处理切换自动检查更新
@@ -2046,27 +2034,6 @@ export const SettingsScreen = () => {
                   trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
                   thumbColor={
                     localDebugUrlScheme ? theme.colors.surface : theme.colors.textTertiary
-                  }
-                />
-              </View>
-            )}
-
-            {localDebugModeEnabled && (
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    提醒非验证码类短信
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    收到非验证码短信时显示 Toast
-                  </Text>
-                </View>
-                <Switch
-                  value={localDebugSmsNotify}
-                  onValueChange={handleToggleDebugSmsNotify}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localDebugSmsNotify ? theme.colors.surface : theme.colors.textTertiary
                   }
                 />
               </View>

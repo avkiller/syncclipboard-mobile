@@ -232,11 +232,13 @@ class SyncForegroundService : Service() {
             nm.createNotificationChannel(channel)
         }
 
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+        // 启动 ServiceRestartActivity（自动恢复服务后退出）
+        val restartIntent = Intent().apply {
+            setClassName(packageName, "com.jericx.syncclipboardmobile.servicerestart.ServiceRestartActivity")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, launchIntent,
+            this, 0, restartIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -250,7 +252,7 @@ class SyncForegroundService : Service() {
 
         val notification = NotificationCompat.Builder(this, RESTART_CHANNEL_ID)
             .setContentTitle("后台服务已停止")
-            .setContentText("点击启动APP以恢复后台服务")
+            .setContentText("点击恢复后台服务")
             .setSmallIcon(iconResId)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)

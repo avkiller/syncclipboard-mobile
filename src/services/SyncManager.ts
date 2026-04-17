@@ -705,7 +705,7 @@ export class SyncManager {
   /**
    * 获取内容预览文本（用于 Toast 通知）
    */
-  private getContentPreview(content: ClipboardContent): string {
+  public getContentPreview(content: ClipboardContent): string {
     if (content.type === 'Text' && content.text) {
       const text = content.text.trim().replace(/\s+/g, ' ');
       return text.length > 30 ? text.slice(0, 30) + '…' : text;

@@ -15,7 +15,7 @@
  * HomeScreen 不再负责后台服务的启动与停止。
  */
 
-import { Platform } from 'react-native';
+import { Platform, ToastAndroid } from 'react-native';
 import { SyncDirection } from '../types/sync';
 
 class BackgroundServiceManager {
@@ -39,7 +39,16 @@ class BackgroundServiceManager {
       const { SyncManager } = require('./SyncManager');
       const manager = SyncManager.getInstance();
       if (manager.getAPIClient()) {
-        await manager.sync(SyncDirection.Download, true);
+        const result = await manager.sync(SyncDirection.Download, true);
+        if (result.success && !result.skipped && result.content) {
+          const preview = manager.getContentPreview(result.content);
+          manager.updateForegroundNotification(`已下载: ${preview}`);
+          const { useSettingsStore } = require('../stores/settingsStore');
+          const appConfig = useSettingsStore.getState().config;
+          if (Platform.OS === 'android' && (appConfig?.syncToastEnabled ?? true)) {
+            ToastAndroid.show(`已下载\n${preview}`, ToastAndroid.SHORT);
+          }
+        }
       }
     } catch {}
   };
@@ -248,6 +257,28 @@ class BackgroundServiceManager {
 
     // SMS 转发不受后台任务总开关控制
     this._updateSmsReceiver();
+
+    // 更新前台服务常驻通知
+    try {
+      const ForegroundService = require('foreground-service');
+      const isRunning = ForegroundService.isRunning();
+      if (config?.enableForegroundNotification && !isRunning) {
+        // 启用通知但服务未运行 → 启动
+        ForegroundService.startService();
+        this.stopSub = ForegroundService.addStopListener(() => {
+          useSettingsStore.getState().setEnableBackgroundTasks(false);
+        });
+        this.tempStopSub = ForegroundService.addTempStopListener(() => {
+          useSettingsStore.getState().setTempDisabledBackgroundTasks(true);
+        });
+      } else if (!config?.enableForegroundNotification && isRunning) {
+        // 关闭通知但服务运行中 → 停止
+        this._cleanupListeners();
+        ForegroundService.stopService();
+      }
+    } catch (e) {
+      console.error('[BackgroundServiceManager] Failed to update foreground service:', e);
+    }
 
     // 更新后台下载（SignalR vs 轮询）
     const shouldDownload = config?.enableBackgroundTasks && config?.enableBackgroundDownload;
