@@ -39,6 +39,11 @@ import {
 } from '@/services';
 import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
+import {
+  isShizukuAvailable,
+  hasShizukuPermission,
+  requestShizukuPermission,
+} from 'shizuku-clipboard';
 import { extractVerificationCode } from '@/tasks/SmsUploadTask';
 
 export const SettingsScreen = () => {
@@ -66,6 +71,7 @@ export const SettingsScreen = () => {
     setEnableClipboardOverlay,
     setEnableBackgroundTasks,
     setEnableSmsForwarding,
+    setEnableShizukuClipboard,
     isTempDisabledBackgroundTasks,
     setTempDisabledBackgroundTasks,
   } = useSettingsStore();
@@ -98,6 +104,9 @@ export const SettingsScreen = () => {
   );
   const [localClipboardOverlayEnabled, setLocalClipboardOverlayEnabled] = useState(
     config?.enableClipboardOverlay ?? false
+  );
+  const [localShizukuClipboardEnabled, setLocalShizukuClipboardEnabled] = useState(
+    config?.enableShizukuClipboard ?? false
   );
   const [localSmsForwardingEnabled, setLocalSmsForwardingEnabled] = useState(
     config?.enableSmsForwarding ?? false
@@ -182,6 +191,10 @@ export const SettingsScreen = () => {
   }, [config?.enableClipboardOverlay]);
 
   useEffect(() => {
+    setLocalShizukuClipboardEnabled(config?.enableShizukuClipboard ?? false);
+  }, [config?.enableShizukuClipboard]);
+
+  useEffect(() => {
     setLocalSmsForwardingEnabled(config?.enableSmsForwarding ?? false);
   }, [config?.enableSmsForwarding]);
 
@@ -221,6 +234,9 @@ export const SettingsScreen = () => {
       setPermSms(sms);
       const { isIgnoringBatteryOptimizations } = await import('native-util');
       setPermBattery(isIgnoringBatteryOptimizations());
+      const shizukuUp = isShizukuAvailable();
+      setShizukuAvailable(shizukuUp);
+      setPermShizuku(shizukuUp && hasShizukuPermission());
     } catch (e) {
       console.warn('[Settings] Failed to check permissions:', e);
     } finally {
@@ -286,6 +302,8 @@ export const SettingsScreen = () => {
   const [permOverlay, setPermOverlay] = useState<boolean>(false);
   const [permSms, setPermSms] = useState<boolean>(false);
   const [permBattery, setPermBattery] = useState<boolean>(false);
+  const [permShizuku, setPermShizuku] = useState<boolean>(false);
+  const [shizukuAvailable, setShizukuAvailable] = useState<boolean>(false);
   const [isRefreshingPermissions, setIsRefreshingPermissions] = useState<boolean>(false);
   const hasBatteryOptRequested = useRef<boolean>(false);
 
@@ -495,7 +513,7 @@ export const SettingsScreen = () => {
     if (enabled && Platform.OS === 'android') {
       Alert.alert(
         '启用悬浮窗获取剪贴板',
-        '启用后，应用将通过不可见的悬浮窗在后台获取剪贴板内容。这可能导致部分应用因焦点问题产生功能异常以及其他问题。\n\n如果您已通过基于 root 的工具授予了 SyncClipboard 后台剪贴板读取权限，建议关闭此选项。',
+        '启用后，应用将通过不可见的悬浮窗在后台获取剪贴板内容。这可能导致部分应用因焦点问题产生功能异常以及其他问题。\n\n如果您可以通过其他工具授予 SyncClipboard 后台读取剪贴板的权限，建议关闭此选项。',
         [
           { text: '取消', style: 'cancel' },
           {
@@ -527,6 +545,62 @@ export const SettingsScreen = () => {
       showMessage(enabled ? '已启用悬浮窗获取剪贴板' : '已禁用悬浮窗获取剪贴板', 'success');
     } catch (error: unknown) {
       setLocalClipboardOverlayEnabled(!enabled);
+      showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+    }
+  };
+
+  // 处理切换 Shizuku 获取剪贴板
+  const handleToggleShizukuClipboard = async (enabled: boolean) => {
+    if (enabled && Platform.OS === 'android') {
+      // 检查 Shizuku 是否可用
+      if (!isShizukuAvailable()) {
+        Alert.alert(
+          'Shizuku 未运行',
+          '请先安装并启动 Shizuku。\n\n非 Root 设备每次重启后需重新启动 Shizuku（Android 11+ 可通过无线调试自行启动）。',
+          [
+            { text: '取消', style: 'cancel' },
+            {
+              text: '了解更多',
+              onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
+            },
+          ]
+        );
+        return;
+      }
+
+      // 检查 Shizuku 权限
+      if (!hasShizukuPermission()) {
+        const requested = requestShizukuPermission();
+        if (!requested) {
+          Alert.alert('权限请求失败', '无法请求 Shizuku 权限，请确认 Shizuku 版本支持。');
+          return;
+        }
+        showMessage('请在 Shizuku 弹窗中授予权限后重新启用', 'info');
+        return;
+      }
+
+      setLocalShizukuClipboardEnabled(true);
+      try {
+        // 启用 Shizuku 时自动关闭悬浮窗方式
+        if (localClipboardOverlayEnabled) {
+          setLocalClipboardOverlayEnabled(false);
+          await setEnableClipboardOverlay(false);
+        }
+        await setEnableShizukuClipboard(true);
+        showMessage('已启用 Shizuku 获取剪贴板', 'success');
+      } catch (error: unknown) {
+        setLocalShizukuClipboardEnabled(false);
+        showMessage(error instanceof Error ? error.message : '设置失败', 'error');
+      }
+      return;
+    }
+
+    setLocalShizukuClipboardEnabled(enabled);
+    try {
+      await setEnableShizukuClipboard(enabled);
+      showMessage(enabled ? '已启用 Shizuku 获取剪贴板' : '已禁用 Shizuku 获取剪贴板', 'success');
+    } catch (error: unknown) {
+      setLocalShizukuClipboardEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : '设置失败', 'error');
     }
   };
@@ -1481,6 +1555,34 @@ export const SettingsScreen = () => {
                 />
               </View>
 
+              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+                <View style={styles.settingInfo}>
+                  <Text
+                    style={[
+                      styles.settingLabel,
+                      {
+                        color: localBackgroundTasksEnabled
+                          ? theme.colors.text
+                          : theme.colors.textTertiary,
+                      },
+                    ]}
+                  >
+                    通过悬浮窗获取本地剪贴板
+                  </Text>
+                </View>
+                <Switch
+                  value={localBackgroundTasksEnabled && localClipboardOverlayEnabled}
+                  onValueChange={handleToggleClipboardOverlay}
+                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                  thumbColor={
+                    localBackgroundTasksEnabled && localClipboardOverlayEnabled
+                      ? theme.colors.surface
+                      : theme.colors.textTertiary
+                  }
+                  disabled={!localBackgroundTasksEnabled}
+                />
+              </View>
+
               <View style={styles.settingRowNoBorder}>
                 <View style={styles.settingInfo}>
                   <Text
@@ -1493,15 +1595,21 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    在后台时通过悬浮窗获取本地剪贴板
+                    通过 Shizuku 获取本地剪贴板
+                  </Text>
+                  <Text
+                    style={[styles.settingDescription, { color: theme.colors.primary }]}
+                    onPress={() => Linking.openURL('https://shizuku.rikka.app/')}
+                  >
+                    前往 Shizuku 官网
                   </Text>
                 </View>
                 <Switch
-                  value={localBackgroundTasksEnabled && localClipboardOverlayEnabled}
-                  onValueChange={handleToggleClipboardOverlay}
+                  value={localBackgroundTasksEnabled && localShizukuClipboardEnabled}
+                  onValueChange={handleToggleShizukuClipboard}
                   trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
                   thumbColor={
-                    localBackgroundTasksEnabled && localClipboardOverlayEnabled
+                    localBackgroundTasksEnabled && localShizukuClipboardEnabled
                       ? theme.colors.surface
                       : theme.colors.textTertiary
                   }
@@ -1605,6 +1713,46 @@ export const SettingsScreen = () => {
                   onValueChange={() => Linking.openSettings()}
                   trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
                   thumbColor={permSms ? theme.colors.surface : theme.colors.textTertiary}
+                />
+              </View>
+
+              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
+                <View style={styles.settingInfo}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    Shizuku 权限
+                  </Text>
+                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
+                    {shizukuAvailable
+                      ? '后台通过 Shizuku 获取剪贴板所需'
+                      : 'Shizuku 未运行，请先启动 Shizuku'}
+                  </Text>
+                </View>
+                <Switch
+                  value={permShizuku}
+                  onValueChange={async () => {
+                    if (!shizukuAvailable) {
+                      Alert.alert(
+                        'Shizuku 未运行',
+                        '请先安装并启动 Shizuku。\n\n非 Root 设备每次重启后需重新启动 Shizuku（Android 11+ 可通过无线调试自行启动）。',
+                        [
+                          {
+                            text: '了解更多',
+                            onPress: () =>
+                              Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
+                          },
+                          { text: '取消', style: 'cancel' },
+                        ]
+                      );
+                      return;
+                    }
+                    if (!permShizuku) {
+                      requestShizukuPermission();
+                      // 延迟刷新权限状态（等待用户授权）
+                      setTimeout(refreshPermissions, 2000);
+                    }
+                  }}
+                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
+                  thumbColor={permShizuku ? theme.colors.surface : theme.colors.textTertiary}
                 />
               </View>
 

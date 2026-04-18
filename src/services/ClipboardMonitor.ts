@@ -200,7 +200,7 @@ export class ClipboardMonitor {
       const content = await this.clipboardManager.getClipboardContent();
 
       if (!content) {
-        console.log('[ClipboardMonitor] Poll: clipboard is empty');
+        // console.log('[ClipboardMonitor] Poll: clipboard is empty');
         return;
       }
 

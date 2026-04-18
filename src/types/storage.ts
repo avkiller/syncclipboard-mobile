@@ -101,6 +101,9 @@ export interface AppConfig {
   /** 是否在后台时使用悬浮窗获取剪贴板（仅 Android） */
   enableClipboardOverlay: boolean;
 
+  /** 是否使用 Shizuku 在后台获取剪贴板（仅 Android） */
+  enableShizukuClipboard: boolean;
+
   /** 是否启用自动上传短信验证码（仅 Android） */
   enableSmsForwarding: boolean;
 
@@ -294,6 +297,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   enableBackgroundDownload: false, // 默认关闭后台下载远程
   enableBackgroundUpload: false, // 默认关闭后台上传本地
   enableClipboardOverlay: false, // 默认关闭悬浮窗获取剪贴板
+  enableShizukuClipboard: false, // 默认关闭 Shizuku 获取剪贴板
   enableSmsForwarding: false, // 默认关闭自动上传短信验证码
   debugOverlayVisible: false, // 默认不显示悬浮窗
   debugUrlScheme: false, // 默认不显示 URL Scheme 调用
