@@ -37,7 +37,10 @@ class ShizukuClipboardModule : Module() {
             .daemon(false)
             .processNameSuffix("clipboard")
             .debuggable(true)
-            .version(1)
+            // 使用当前进程 PID 作为版本号：每次 app 重启后 PID 不同，
+            // Shizuku 检测到版本变化会自动杀死旧的 UserService 进程并创建新的，
+            // 避免应用被强杀后遗留孤儿进程。
+            .version(android.os.Process.myPid())
     }
 
     private val serviceConnection = object : ServiceConnection {
