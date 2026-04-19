@@ -24,10 +24,15 @@ export interface ApiResponse<T = unknown> {
 
 // Settings Types (keeping for backward compatibility)
 export interface ServerConfig {
-  type: 'syncclipboard' | 'builtin' | 'webdav';
+  type: 'syncclipboard' | 'webdav' | 's3';
+  name?: string;
   url: string;
   username?: string;
   password?: string;
+  region?: string;
+  bucketName?: string;
+  objectPrefix?: string;
+  forcePathStyle?: boolean;
 }
 
 export interface AppSettings {

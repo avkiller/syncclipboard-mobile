@@ -13,7 +13,7 @@ import * as SignalR from '@microsoft/signalr';
 // ========== Types (self-contained, no cross-module imports) ==========
 
 export interface ServerConfig {
-  type: 'syncclipboard' | 'webdav';
+  type: 'syncclipboard' | 'webdav' | 's3';
   url: string;
   username?: string;
   password?: string;

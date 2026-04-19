@@ -232,7 +232,10 @@ export function HomeScreen() {
 
     // hash 没变但 fileUri 更新了（例如快捷同步在后台下载了文件），只更新显示
     if (resolved.fileUriOnlyUpdate) {
-      setRemoteContent(resolved.content);
+      setRemoteContent((prev) => {
+        if (prev?.fileUri === resolved.content.fileUri) return prev; // fileUri 未变，跳过更新
+        return prev ? { ...prev, fileUri: resolved.content.fileUri } : resolved.content;
+      });
       return;
     }
 

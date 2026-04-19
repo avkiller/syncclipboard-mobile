@@ -92,6 +92,9 @@ export interface ISyncClipboardAPI {
 
   /** 获取服务器信息 */
   getServerInfo(): Promise<ServerInfo>;
+
+  /** 测试连接 */
+  testConnection(signal?: AbortSignal): Promise<void>;
 }
 
 /**

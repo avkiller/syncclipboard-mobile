@@ -1316,21 +1316,21 @@ export const SettingsScreen = () => {
                   历史记录同步
                 </Text>
                 <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {activeServer?.type === 'webdav'
-                    ? 'WebDAV 服务器不支持历史记录同步'
+                  {activeServer?.type !== 'syncclipboard'
+                    ? '当前服务器不支持历史记录同步'
                     : '同步历史记录到服务器'}
                 </Text>
               </View>
               <Switch
-                value={localHistorySyncEnabled && activeServer?.type !== 'webdav'}
+                value={localHistorySyncEnabled && activeServer?.type === 'syncclipboard'}
                 onValueChange={handleToggleHistorySync}
                 trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
                 thumbColor={
-                  localHistorySyncEnabled && activeServer?.type !== 'webdav'
+                  localHistorySyncEnabled && activeServer?.type === 'syncclipboard'
                     ? theme.colors.surface
                     : theme.colors.textTertiary
                 }
-                disabled={activeServer?.type === 'webdav'}
+                disabled={activeServer?.type !== 'syncclipboard'}
               />
             </View>
 

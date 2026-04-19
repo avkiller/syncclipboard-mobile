@@ -8,5 +8,5 @@ export function isHistorySyncEnabled(cfg: AppConfig | null | undefined): boolean
     return false;
   }
   const serverConfig = cfg.servers[cfg.activeServerIndex];
-  return serverConfig?.type !== 'webdav';
+  return serverConfig?.type === 'syncclipboard';
 }

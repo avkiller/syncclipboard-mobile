@@ -67,6 +67,10 @@ export class WebDAVClient extends APIClient implements ISyncClipboardAPI {
 
       return profile;
     } catch (error) {
+      // 404 表示远程剪贴板为空（首次连接），返回默认空配置
+      if (error instanceof ServerError && error.statusCode === 404) {
+        return { type: 'Text', text: '', hasData: false } as ProfileDto;
+      }
       console.error('[WebDAVClient] Failed to get clipboard:', error);
       throw error;
     }

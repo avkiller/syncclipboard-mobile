@@ -11,6 +11,7 @@ import type { AppConfig } from '../types/storage';
 import type { ServerConfig, ProfileDto } from '../types/api';
 import { SyncClipboardClient } from '../services/SyncClipboardClient';
 import { WebDAVClient } from '../services/WebDAVClient';
+import { S3Client } from '../services/S3Client';
 import { AuthService } from '../services/AuthService';
 import type { ISyncClipboardAPI } from '../services/APIClient';
 import { sha256 } from 'js-sha256';
@@ -56,12 +57,25 @@ async function loadConfig(): Promise<AppConfig | null> {
 function createAPIClient(server: ServerConfig): ISyncClipboardAPI {
   const { type, url, username, password } = server;
 
-  if (type === 'webdav') {
-    return new WebDAVClient({ baseURL: url, username: username!, password: password! });
+  if (type === 'syncclipboard') {
+    const authService = username && password ? new AuthService(username, password) : undefined;
+    return new SyncClipboardClient({ baseURL: url, authService });
   }
 
-  const authService = username && password ? new AuthService(username, password) : undefined;
-  return new SyncClipboardClient({ baseURL: url, authService });
+  if (type === 's3') {
+    return new S3Client({
+      serviceURL: url || undefined,
+      region: server.region,
+      bucketName: server.bucketName!,
+      objectPrefix: server.objectPrefix,
+      forcePathStyle: server.forcePathStyle,
+      accessKeyId: username!,
+      secretAccessKey: password!,
+    });
+  }
+
+  // 非 SyncClipboard/S3 服务器，使用 WebDAV 客户端
+  return new WebDAVClient({ baseURL: url, username: username!, password: password! });
 }
 
 /**

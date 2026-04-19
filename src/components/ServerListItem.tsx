@@ -33,6 +33,7 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
   };
 
   const getServerDisplayName = (config: ServerConfig): string => {
+    if (config.name) return config.name;
     try {
       const url = new URL(config.url);
       return url.hostname;
@@ -42,7 +43,14 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
   };
 
   const getServerTypeLabel = (type: string): string => {
-    return type === 'syncclipboard' ? 'SyncClipboard' : 'WebDAV';
+    switch (type) {
+      case 'syncclipboard':
+        return 'SyncClipboard';
+      case 's3':
+        return 'S3';
+      default:
+        return 'WebDAV';
+    }
   };
 
   const getTypeBadgeColors = (type: string) => {
@@ -50,6 +58,11 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
       return {
         backgroundColor: '#4CAF50' + '20',
         color: '#4CAF50',
+      };
+    } else if (type === 's3') {
+      return {
+        backgroundColor: '#2196F3' + '20',
+        color: '#2196F3',
       };
     } else {
       return {
@@ -87,13 +100,21 @@ export const ServerListItem: React.FC<ServerListItemProps> = ({
           </View>
         </View>
 
-        <Text style={[styles.serverUrl, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-          {config.url}
-        </Text>
+        {config.type === 's3' && config.region ? (
+          <Text style={[styles.serverUrl, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+            🌍 {config.region}
+          </Text>
+        ) : (
+          <Text style={[styles.serverUrl, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+            {config.url}
+          </Text>
+        )}
 
         <View style={styles.details}>
           <Text style={[styles.detailText, { color: theme.colors.textSecondary }]}>
-            👤 {config.username || '未设置'}
+            {config.type === 's3'
+              ? `🪣 ${config.bucketName || '未设置'}`
+              : `👤 ${config.username || '未设置'}`}
           </Text>
         </View>
       </View>

@@ -36,16 +36,31 @@ export interface ProfileDto {
  */
 export interface ServerConfig {
   /** 服务器类型 */
-  type: 'syncclipboard' | 'webdav';
+  type: 'syncclipboard' | 'webdav' | 's3';
+
+  /** 服务器显示名称（可选） */
+  name?: string;
 
   /** 服务器 URL */
   url: string;
 
-  /** 用户名 */
+  /** 用户名（S3 时为 Access Key ID） */
   username?: string;
 
-  /** 密码（加密存储） */
+  /** 密码（S3 时为 Secret Access Key） */
   password?: string;
+
+  /** S3 区域（仅 S3 类型） */
+  region?: string;
+
+  /** S3 存储桶名称（仅 S3 类型） */
+  bucketName?: string;
+
+  /** S3 对象 key 前缀（仅 S3 类型） */
+  objectPrefix?: string;
+
+  /** S3 是否使用路径风格寻址（仅 S3 类型） */
+  forcePathStyle?: boolean;
 }
 
 /**
