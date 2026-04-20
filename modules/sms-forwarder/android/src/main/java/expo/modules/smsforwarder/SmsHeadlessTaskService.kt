@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
 import expo.modules.nativeutil.NativeLogger
@@ -141,7 +142,12 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         super.onCreate()
         instance = this
         pendingSuccessCode = null
-        startForeground(NOTIFICATION_ID, buildStaticNotification(this, "SyncClipboard", "正在处理短信验证码…"))
+        val notification = buildStaticNotification(this, "SyncClipboard", "正在处理短信验证码…")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
         NativeLogger.d(TAG, "SmsHeadlessTaskService created, foreground notification posted")
     }
 
@@ -158,7 +164,22 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
             isSuccessPosted = false
             NativeLogger.d(TAG, "New SMS arrived, resetting success state")
         }
-        return super.onStartCommand(intent, flags, startId)
+        return try {
+            super.onStartCommand(intent, flags, startId)
+        } catch (e: Exception) {
+            // 进程冷启动时 React Native JS 运行时可能无法初始化，
+            // 基类 HeadlessJsTaskService.startTask() 没有异常保护，会直接崩溃。
+            NativeLogger.e(TAG, "HeadlessJsTaskService failed to start React context: " +
+                    "${e.javaClass.simpleName}: ${e.message}", e)
+            updateNotificationText(this,
+                "验证码上传失败：JS 运行时未就绪\n${e.javaClass.simpleName}: ${e.message}")
+            // 5 秒后自动关闭通知并停止服务
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }, 5000)
+            START_NOT_STICKY
+        }
     }
 
     override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig? {
