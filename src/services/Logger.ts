@@ -63,7 +63,7 @@ const customFileTransport = (props: {
 
     const today = new Date();
     const dateStr = formatLocalDate(today);
-    const fileName = `app_${dateStr}.log`;
+    const fileName = `app_${dateStr}.txt`;
     const logFile = new File(LOG_DIR, fileName);
 
     const timestamp = formatLocalTimestamp(today);
@@ -145,7 +145,7 @@ export function getLogFilePaths(): string[] {
   const files = LOG_DIR.list();
   return files
     .filter((entry): entry is File => entry instanceof File)
-    .filter((file) => file.name.endsWith('.log'))
+    .filter((file) => file.name.endsWith('.txt'))
     .map((file) => file.uri);
 }
 
@@ -197,8 +197,8 @@ export function cleanOldLogs(): void {
 
   const files = LOG_DIR.list();
   for (const entry of files) {
-    if (entry instanceof File && entry.name.endsWith('.log')) {
-      const match = entry.name.match(/app_(\d{4}-\d{2}-\d{2})\.log/);
+    if (entry instanceof File && entry.name.endsWith('.txt')) {
+      const match = entry.name.match(/app_(\d{4}-\d{2}-\d{2})\.txt/);
       if (match) {
         const fileDate = new Date(match[1]);
         if (fileDate < cutoffDate) {
@@ -226,7 +226,7 @@ export function getLogFileUris(): string[] {
   }
 
   return LOG_DIR.list()
-    .filter((entry): entry is File => entry instanceof File && entry.name.endsWith('.log'))
+    .filter((entry): entry is File => entry instanceof File && entry.name.endsWith('.txt'))
     .map((file) => file.uri);
 }
 

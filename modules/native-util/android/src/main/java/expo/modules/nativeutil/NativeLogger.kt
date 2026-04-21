@@ -64,7 +64,7 @@ object NativeLogger {
         executor.execute {
             try {
                 val now = Date()
-                val fileName = "kotlin_${dateFormat.format(now)}.log"
+                val fileName = "kotlin_${dateFormat.format(now)}.txt"
                 val file = File(dir, fileName)
                 val timestamp = timestampFormat.format(now)
                 val line = "$timestamp $level [$tag]: $msg\n"
@@ -81,9 +81,9 @@ object NativeLogger {
             try {
                 val cutoff = System.currentTimeMillis() - MAX_LOG_DAYS * 24 * 60 * 60 * 1000L
                 dir.listFiles()?.filter { file ->
-                    file.name.startsWith("kotlin_") && file.name.endsWith(".log")
+                    file.name.startsWith("kotlin_") && file.name.endsWith(".txt")
                 }?.forEach { file ->
-                    val dateStr = file.name.removePrefix("kotlin_").removeSuffix(".log")
+                    val dateStr = file.name.removePrefix("kotlin_").removeSuffix(".txt")
                     try {
                         val fileDate = dateFormat.parse(dateStr)
                         if (fileDate != null && fileDate.time < cutoff) {
