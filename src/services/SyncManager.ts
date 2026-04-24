@@ -631,6 +631,20 @@ export class SyncManager {
 
       // 如果有文件数据，优先从历史记录读取缓存，否则下载并保存到历史记录
       if (profile.hasData && profile.dataName) {
+        // 检查文件大小是否超过"允许自动同步的数据大小"限制
+        const autoDownloadMaxSize =
+          useSettingsStore.getState().config?.autoDownloadMaxSize ?? 5 * 1024 * 1024;
+        if (profile.size && profile.size > autoDownloadMaxSize) {
+          console.log(
+            `[SyncManager] File too large (${profile.size} bytes > ${autoDownloadMaxSize} bytes), skipping auto-download`
+          );
+          return {
+            success: true,
+            direction: SyncDirection.Download,
+            profileHash: remoteProfileHash,
+            skipped: true,
+          };
+        }
         const { downloadAndAddToHistory } = await import('../utils/remoteClipboard');
         const updatedContent = await downloadAndAddToHistory(
           content,

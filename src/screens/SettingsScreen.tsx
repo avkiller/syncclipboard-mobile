@@ -1600,7 +1600,7 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    通过悬浮窗获取本地剪贴板
+                    后台时通过悬浮窗获取剪贴板
                   </Text>
                 </View>
                 <Switch
@@ -1628,7 +1628,7 @@ export const SettingsScreen = () => {
                       },
                     ]}
                   >
-                    通过 Shizuku 获取本地剪贴板
+                    后台时通过 Shizuku 获取剪贴板
                   </Text>
                   <Text
                     style={[styles.settingDescription, { color: theme.colors.primary }]}

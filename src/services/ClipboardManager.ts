@@ -197,20 +197,17 @@ export class ClipboardManager {
 
       // 将随机命名的临时文件重命名为基于 hash 的确定性名称（便于去重）
       const hashTempFileName = `${localClipboardHash.substring(0, 16)}.${imageExt}`;
-      const hashTempFilePath = prepareTempFilePath(hashTempFileName);
-      let tempFilePath: string;
-      const hashTempFile = new File(hashTempFilePath);
+      let tempFilePath = prepareTempFilePath(hashTempFileName);
+      const hashTempFile = new File(tempFilePath);
       if (hashTempFile.exists) {
         // 已有同内容文件，删除随机临时文件
         try {
           new File(randomTempFilePath).delete();
         } catch {}
-        tempFilePath = hashTempFilePath;
       } else {
         // 重命名为 hash 命名
         try {
           new File(randomTempFilePath).move(hashTempFile);
-          tempFilePath = hashTempFilePath;
         } catch {
           tempFilePath = randomTempFilePath;
         }
@@ -232,24 +229,14 @@ export class ClipboardManager {
 
         if (historyFileUri) {
           const historyFile = new File(historyFileUri);
-
           if (historyFile.exists) {
-            const fileHashName = historyItem.dataName;
-
-            // 从文件计算 fileHash
-            const fileHash = await calculateFileHash(historyFile.uri);
-
-            // 根据服务器规则计算 profileHash
-            const combinedString = `${fileHashName}|${fileHash.toUpperCase()}`;
-            const profileHash = await calculateTextHash(combinedString);
-
             return {
               type: 'Image',
-              text: '[图片]',
+              text: historyItem.dataName,
               fileUri: historyFile.uri,
-              fileName: fileHashName,
+              fileName: historyItem.dataName,
               fileSize: historyFile.size,
-              profileHash,
+              profileHash: historyItem.profileHash,
               localClipboardHash,
               hasData: true,
               timestamp,
@@ -263,19 +250,15 @@ export class ClipboardManager {
       const fileUri = tempFile.uri;
       const fileSize = tempFile.size;
 
-      // 从文件计算 fileHash
-      const fileHash = await calculateFileHash(fileUri);
-      const fileHashName = `${fileHash.substring(0, 16)}.${imageExt}`;
-
       // 根据服务器规则计算 profileHash
-      const combinedString = `${fileHashName}|${fileHash.toUpperCase()}`;
+      const combinedString = `${tempFile.name}|${localClipboardHash.toUpperCase()}`;
       const profileHash = await calculateTextHash(combinedString);
 
       return {
         type: 'Image',
-        text: '[图片]',
+        text: tempFile.name,
         fileUri,
-        fileName: fileHashName,
+        fileName: tempFile.name,
         fileSize,
         profileHash,
         localClipboardHash,
