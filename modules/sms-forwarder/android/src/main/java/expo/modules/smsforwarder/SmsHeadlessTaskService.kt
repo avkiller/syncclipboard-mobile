@@ -153,7 +153,11 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         val notification = buildStaticNotification(this, "SyncClipboard", "正在处理短信验证码…")
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                // shortService: Android 14+ 引入，无 dataSync 的 6小时/24小时累计配额限制，
+                // 最长 3 分钟（任务超时 60s，完全满足）。
+                // dataSync 在主剪贴板同步服务长期运行后配额耗尽，会导致此处抛出
+                // ForegroundServiceStartNotAllowedException，改用 shortService 规避该问题。
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }

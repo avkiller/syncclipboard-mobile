@@ -126,6 +126,24 @@ class SyncForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * Android 14+ 回调：dataSync 类型前台服务 6小时/24小时配额耗尽时由系统调用。
+     * 若不在此回调中及时停止，系统会强制 ANR 终止进程（不经过 onDestroy 优雅路径）。
+     * 处理同用户临时停止：通知 JS 侧重新调度，下次 App 进入前台时重启服务。
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    override fun onTimeout(startId: Int) {
+        NativeLogger.w(TAG, "dataSync foreground service timed out (6h/24h quota exhausted), stopping gracefully")
+        stoppedByUser = true   // 防止 onDestroy 重复发通知
+        showRestartNotification(contentText = "系统限制后台任务在主界面关闭后24小时内最多运行6小时，点击重新启动")
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        isRunning = false
+        // 不调用 sendTempStopEvent()：此为系统强制超时，非用户主动停止。
+        // 保持 JS 侧 isTempDisabledBackgroundTasks=false，
+        // 用户打开 App 后 start() 可自动重试启动服务。
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
         NativeLogger.d(TAG, "onTaskRemoved: user swiped app from recents, stopping service")
@@ -226,7 +244,7 @@ class SyncForegroundService : Service() {
         notificationManager?.notify(NOTIFY_ID, notification)
     }
 
-    private fun showRestartNotification() {
+    private fun showRestartNotification(contentText: String = "点击恢复后台服务") {
         val nm = getSystemService(NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
         // 创建独立的通知渠道（重要性设为 HIGH 以弹出 heads-up）
@@ -261,7 +279,7 @@ class SyncForegroundService : Service() {
 
         val notification = NotificationCompat.Builder(this, RESTART_CHANNEL_ID)
             .setContentTitle("后台服务已停止")
-            .setContentText("点击恢复后台服务")
+            .setContentText(contentText)
             .setSmallIcon(iconResId)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
