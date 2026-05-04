@@ -51,10 +51,13 @@ jobs:
         
       - name: Decode Keystore
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android_release.keystore
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android_release.keystore 
 
-      - name: Build Android APK
-        run: npm run build:apk
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Release APK
+        run: cd android && ./gradlew assembleRelease
         env:
           # 以下变量会被 Expo 生成的 Gradle 脚本自动识别或用于覆盖
           RELEASE_STORE_FILE: ../../android_release.keystore
@@ -67,12 +70,6 @@ jobs:
           MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           MYAPP_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
-
-      - name: Build Release APK
-        run: cd android && ./gradlew assembleRelease
 
       - name: Get version name
         id: version
