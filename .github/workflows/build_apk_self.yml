@@ -50,18 +50,37 @@ jobs:
 
       - name: Expo prebuild
         run: npx expo prebuild --no-install
-      
-      - name: Inject Signing Config to Gradle
-        run: |
-          # 定义要插入的 Groovy 代码
-          SIGNING_CODE="signingConfigs { release { storeFile file('android_release.keystore'); storePassword System.getenv('RELEASE_STORE_PASSWORD'); keyAlias System.getenv('RELEASE_KEY_ALIAS'); keyPassword System.getenv('RELEASE_KEY_PASSWORD') } }; buildTypes { release { signingConfig signingConfigs.release "
-          
-          # 使用 sed 在 buildTypes 之前插入配置
-          sed -i "s/buildTypes {/ $SIGNING_CODE /" android/app/build.gradle
-        
+
       - name: Decode Keystore
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/android_release.keystore 
+
+      - name: Configure Gradle Properties
+        run: |
+          # 将签名信息写入 gradle.properties，Gradle 会自动识别这些变量
+          cat <<EOF >> android/gradle.properties
+          RELEASE_STORE_FILE=android_release.keystore
+          RELEASE_STORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      - name: Inject Signing Config to build.gradle
+        run: |
+          # 仅插入签名配置 logic，不重复外层的 android {} 块
+          # 这里的逻辑是：在 android 块内部查找并替换
+          sed -i '/defaultConfig {/i \
+          signingConfigs { \
+              release { \
+                  storeFile file(RELEASE_STORE_FILE) \
+                  storePassword RELEASE_STORE_PASSWORD \
+                  keyAlias RELEASE_KEY_ALIAS \
+                  keyPassword RELEASE_KEY_PASSWORD \
+              } \
+          }' android/app/build.gradle
+          
+          # 在 buildTypes 的 release 块中启用签名
+          sed -i '/buildTypes {/,/}/ s/release {/release { signingConfig signingConfigs.release/' android/app/build.gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
