@@ -1,4 +1,4 @@
-package com.jericx.syncclipboardmobile.processtext
+package com.avkiller.syncclipboardmobile.processtext
 
 import android.app.Activity
 import android.content.Intent

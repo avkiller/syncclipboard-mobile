@@ -22,7 +22,7 @@
         "backgroundColor": "#ffffff"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.jericx.syncclipboardmobile",
+      "package": "com.avkiller.syncclipboardmobile",
       "permissions": ["android.permission.REQUEST_INSTALL_PACKAGES"]
     },
     "web": {

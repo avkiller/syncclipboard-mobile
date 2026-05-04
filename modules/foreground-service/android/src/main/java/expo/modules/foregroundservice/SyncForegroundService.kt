@@ -261,7 +261,7 @@ class SyncForegroundService : Service() {
 
         // 启动 ServiceRestartActivity（自动恢复服务后退出）
         val restartIntent = Intent().apply {
-            setClassName(packageName, "com.jericx.syncclipboardmobile.servicerestart.ServiceRestartActivity")
+            setClassName(packageName, "com.avkiller.syncclipboardmobile.servicerestart.ServiceRestartActivity")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         val pendingIntent = PendingIntent.getActivity(

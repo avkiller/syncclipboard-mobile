@@ -30,7 +30,7 @@ class ShortcutModule : Module() {
         private const val UPLOAD_ICON_RES = "ic_tile_upload"
         private const val UPLOAD_BG_COLOR = "#007AFF"
 
-        private const val QUICK_ACTION_ACTIVITY = "com.jericx.syncclipboardmobile.quickaction.QuickActionActivity"
+        private const val QUICK_ACTION_ACTIVITY = "com.avkiller.syncclipboardmobile.quickaction.QuickActionActivity"
 
     }
 

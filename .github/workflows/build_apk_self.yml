@@ -19,6 +19,8 @@ jobs:
   build:
     name: Build Release APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
           VERSION: ${{ inputs.version }}
           TAG_NAME: ${{ inputs.version }}
@@ -96,5 +98,6 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           files: |
            android/app/build/outputs/apk/release/SyncClipboard-${{ steps.version.outputs.version }}-arm64-v8a.apk
-
+          env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       

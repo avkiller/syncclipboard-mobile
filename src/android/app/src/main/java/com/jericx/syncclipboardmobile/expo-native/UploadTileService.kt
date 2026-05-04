@@ -1,4 +1,4 @@
-package com.jericx.syncclipboardmobile.quicksettings
+package com.avkiller.syncclipboardmobile.quicksettings
 
 import android.annotation.SuppressLint
 import android.app.PendingIntent
@@ -35,7 +35,7 @@ class UploadTileService : TileService() {
             val intent = Intent().apply {
                 component = ComponentName(
                     applicationContext,
-                    "com.jericx.syncclipboardmobile.quickaction.QuickActionActivity"
+                    "com.avkiller.syncclipboardmobile.quickaction.QuickActionActivity"
                 )
                 putExtra("direction", "upload")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

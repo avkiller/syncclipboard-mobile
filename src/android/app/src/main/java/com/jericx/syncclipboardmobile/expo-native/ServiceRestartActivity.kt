@@ -1,4 +1,4 @@
-package com.jericx.syncclipboardmobile.servicerestart
+package com.avkiller.syncclipboardmobile.servicerestart
 
 import android.os.Bundle
 
@@ -8,7 +8,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnable
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 import android.content.res.Configuration
-import com.jericx.syncclipboardmobile.BuildConfig
+import com.avkiller.syncclipboardmobile.BuildConfig
 import expo.modules.ReactActivityDelegateWrapper
 
 /**
