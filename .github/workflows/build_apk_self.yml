@@ -81,6 +81,7 @@ jobs:
           
           # 在 buildTypes 的 release 块中启用签名
           sed -i '/buildTypes {/,/}/ s/release {/release { signingConfig signingConfigs.release/' android/app/build.gradle
+          sed -i '/release {/,/}/ s/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
