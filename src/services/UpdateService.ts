@@ -160,7 +160,7 @@ export async function checkForUpdate(
       latestVersion: latest.tag_name,
       tagName: latest.tag_name,
       releaseUrl: latest.html_url,
-      giteeReleaseUrl: `https://gitee.com/JericX/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
+      giteeReleaseUrl: ``,
       assets: apkAssets,
       releaseNotes: latest.body,
     };
@@ -172,7 +172,7 @@ export async function checkForUpdate(
     latestVersion: versionToStr(latestParsed),
     tagName: latest.tag_name,
     releaseUrl: latest.html_url,
-    giteeReleaseUrl: `https://gitee.com/JericX/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
+    giteeReleaseUrl: ``,
     assets: apkAssets,
     releaseNotes: latest.body,
   };
