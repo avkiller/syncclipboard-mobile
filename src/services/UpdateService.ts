@@ -3,10 +3,10 @@
  * 检查 GitHub 最新 Release 版本更新
  */
 
-const GITHUB_RELEASES_API = 'https://api.github.com/repos/Jeric-X/syncclipboard-mobile/releases';
-const RELEASES_PAGE_URL = 'https://github.com/Jeric-X/syncclipboard-mobile/releases';
-const GITEE_RELEASES_PAGE_URL = 'https://gitee.com/JericX/syncclipboard-mobile/releases';
-const GITEE_DOWNLOAD_BASE = 'https://gitee.com/JericX/syncclipboard-mobile/releases/download';
+const GITHUB_RELEASES_API = 'https://api.github.com/repos/avkiller/syncclipboard-mobile/releases';
+const RELEASES_PAGE_URL = 'https://github.com/avkiller/syncclipboard-mobile/releases';
+const GITEE_RELEASES_PAGE_URL = '';
+const GITEE_DOWNLOAD_BASE = '';
 
 export interface ParsedVersion {
   major: number;
