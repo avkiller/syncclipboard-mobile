@@ -32,6 +32,7 @@ class ClipboardSyncService {
   private _isStarted = false;
   private _bgUploadEnabled = false;
   private _bgDownloadEnabled = false;
+  private _activeServerKey: string | null = null;
   private readonly _cleanups: Array<() => void> = [];
 
   private constructor() {}
@@ -75,6 +76,13 @@ class ClipboardSyncService {
   private _applyConfig(cfg: AppConfig | null): void {
     this._bgUploadEnabled = !!cfg?.enableBackgroundUpload;
     this._bgDownloadEnabled = !!cfg?.enableBackgroundDownload;
+
+    const activeServer = cfg?.servers?.[cfg.activeServerIndex] ?? null;
+    const newServerKey = activeServer ? JSON.stringify(activeServer) : null;
+    if (newServerKey !== this._activeServerKey) {
+      this._activeServerKey = newServerKey;
+      getClipboardChangedHandler().resetLastRemoteProfileHash();
+    }
   }
 
   clearSyncError(): void {

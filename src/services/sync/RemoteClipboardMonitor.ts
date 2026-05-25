@@ -6,13 +6,14 @@
 
 import type { ClipboardContent } from '../../types/clipboard';
 import type { ServerConfig } from '../../types/api';
-import type { ProfileChangedEvent } from 'signalr-client';
+import type { ProfileChangedEvent, ConnectionState } from 'signalr-client';
 import { getSignalRClient } from 'signalr-client';
 import { setTimer, clearTimer } from 'native-timer';
 import { getAPIClient } from '../ClientFactory';
 import { profileDtoToContent } from '../../utils/clipboard/convert';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
+import { DedupedOperation } from '../../utils/DedupedOperation';
 
 /** 远程剪贴板变化回调：仅在内容哈希变化时触发 */
 export type RemoteClipboardChangedCallback = (content: ClipboardContent) => void;
@@ -25,6 +26,8 @@ class RemoteClipboardMonitor {
   private _signalRConnected = false;
   /** 上次触发回调时的内容哈希，用于过滤重复通知 */
   private _lastContentHash: string | null = null;
+  /** 对 fetchLatest 进行去重：并发调用共享同一次请求；配置变更时通过 abort() 取消 */
+  private readonly _fetchOp = new DedupedOperation<true, ClipboardContent>(() => true);
   /**
    * 注入的后台运行检测函数集合。
    * 只要任意一个函数返回 true，后台时就继续监听而不断开。
@@ -120,6 +123,7 @@ class RemoteClipboardMonitor {
   }
 
   async disconnect(): Promise<void> {
+    this._fetchOp.abort();
     this._lastContentHash = null;
     this._stopPolling();
     await this._disconnectSignalR();
@@ -144,6 +148,17 @@ class RemoteClipboardMonitor {
   isConnected(): boolean {
     return this.isPolling() || this.isSignalRConnected();
   }
+
+  private readonly _signalRStateCallback = (state: ConnectionState): void => {
+    if (state === 'DISCONNECTED') {
+      clipboardSyncState.setSyncError({ title: '服务器连接断开' });
+    } else if (state === 'CONNECTED') {
+      clipboardSyncState.clearSyncError();
+      this.refresh().catch((e) => {
+        console.error('[RemoteClipboardMonitor] Post-reconnect refresh failed:', e);
+      });
+    }
+  };
 
   private readonly _signalREventCallback = (event: ProfileChangedEvent): void => {
     try {
@@ -190,9 +205,9 @@ class RemoteClipboardMonitor {
     try {
       await this.fetchLatest();
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
       console.error('[RemoteClipboardMonitor] Failed to fetch latest:', e);
-      const errorMessage = e instanceof Error ? e.message : '获取远程剪贴板失败';
-      clipboardSyncState.setSyncError({ title: '同步失败', message: errorMessage });
+      clipboardSyncState.setSyncError({ title: '服务器连接断开' });
     }
   }
 
@@ -203,17 +218,19 @@ class RemoteClipboardMonitor {
    * @throws 无服务器连接或拉取失败时抛出异常
    */
   async fetchLatest(): Promise<ClipboardContent> {
-    const apiClient = await getAPIClient();
-    const profile = await apiClient.getClipboard();
-    if (!profile) throw new Error('No clipboard data returned');
-    const content: ClipboardContent = profileDtoToContent(profile);
-    const hash = content.profileHash || content.text;
-    if (hash !== this._lastContentHash) {
-      this._lastContentHash = hash;
-      this.notifyCallbacks(content);
+    return this._fetchOp.execute(true, undefined, null, async (signal) => {
+      const apiClient = await getAPIClient();
+      const profile = await apiClient.getClipboard(signal);
+      if (!profile) throw new Error('No clipboard data returned');
+      const content: ClipboardContent = profileDtoToContent(profile);
+      const hash = content.profileHash || content.text;
+      if (hash !== this._lastContentHash) {
+        this._lastContentHash = hash;
+        this.notifyCallbacks(content);
+      }
       clipboardSyncState.clearSyncError();
-    }
-    return content;
+      return content;
+    });
   }
 
   private _stopPolling(): void {
@@ -230,6 +247,7 @@ class RemoteClipboardMonitor {
     try {
       const client = getSignalRClient();
       client.onRemoteClipboardChanged(this._signalREventCallback);
+      client.onConnectionStateChanged(this._signalRStateCallback);
       await client.connect(server);
       this._signalRConnected = true;
       console.log('[RemoteClipboardMonitor] SignalR connected');
@@ -238,8 +256,7 @@ class RemoteClipboardMonitor {
       });
     } catch (e) {
       console.error('[RemoteClipboardMonitor] Failed to connect SignalR:', e);
-      const errorMessage = e instanceof Error ? e.message : '无法连接到服务器';
-      clipboardSyncState.setSyncError({ title: '连接失败', message: errorMessage });
+      clipboardSyncState.setSyncError({ title: '服务器连接断开' });
     }
   }
 
@@ -249,6 +266,7 @@ class RemoteClipboardMonitor {
     try {
       const client = getSignalRClient();
       client.offRemoteClipboardChanged(this._signalREventCallback);
+      client.offConnectionStateChanged(this._signalRStateCallback);
       await client.disconnect();
       console.log('[RemoteClipboardMonitor] SignalR disconnected');
     } catch {}

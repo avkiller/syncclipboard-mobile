@@ -49,9 +49,7 @@ export async function setRemoteClipboard(
 
     await getClientService().setRemoteClipboard(content, notify, sig);
 
-    if (content.profileHash) {
-      remoteClipboardMonitor.setLastContentHash(content.profileHash);
-    }
+    clipboardSyncState.setRemoteContent(content);
     return true;
   });
 }

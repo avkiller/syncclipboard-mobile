@@ -11,6 +11,7 @@ import com.microsoft.signalr.HubConnectionState
 import com.microsoft.signalr.TransportEnum
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import io.reactivex.rxjava3.plugins.RxJavaPlugins
 
 class SignalRClientModule : Module() {
 
@@ -21,7 +22,6 @@ class SignalRClientModule : Module() {
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private var reconnectRunnable: Runnable? = null
     private var reconnectAttempt = 0
-    private val maxReconnectAttempts = 10
     private var currentUrl: String? = null
     private var currentUsername: String? = null
     private var currentPassword: String? = null
@@ -32,6 +32,17 @@ class SignalRClientModule : Module() {
 
     override fun definition() = ModuleDefinition {
         Name("SignalRClientModule")
+
+        OnCreate {
+            // SignalR Java 客户端在连接失败时（transport 尚未初始化）会触发 NPE，
+            // 该异常由 RxJava 作为 undeliverable exception 在 OkHttp 线程上抛出导致崩溃。
+            // 设置全局错误处理器捕获此类异常，记录日志而不崩溃。
+            if (RxJavaPlugins.getErrorHandler() == null) {
+                RxJavaPlugins.setErrorHandler { e ->
+                    NativeLogger.e(TAG, "RxJava undeliverable exception (SignalR bug workaround)", e)
+                }
+            }
+        }
 
         Events("onProfileChanged", "onHistoryChanged", "onStateChanged")
 
@@ -186,13 +197,14 @@ class SignalRClientModule : Module() {
 
     private fun scheduleReconnect() {
         if (currentUrl == null) return
-        if (reconnectAttempt >= maxReconnectAttempts) {
-            NativeLogger.d(TAG, "Max reconnect attempts reached")
-            return
-        }
 
-        cancelReconnect()
-        val delayMs = minOf(2000L * (1L shl reconnectAttempt), 60000L)
+        // 取消上一个定时器，但不重置计数（避免退避延迟永远不增长）
+        reconnectRunnable?.let { reconnectHandler.removeCallbacks(it) }
+        reconnectRunnable = null
+
+        // 限制位移量防止 Long 溢出；从第 3 次起延迟固定在 10000ms
+        val attempt = minOf(reconnectAttempt, 10)
+        val delayMs = minOf(2000L * (1L shl attempt), 10000L)
         reconnectAttempt++
         NativeLogger.d(TAG, "Scheduling SignalR reconnect attempt $reconnectAttempt in ${delayMs}ms")
 

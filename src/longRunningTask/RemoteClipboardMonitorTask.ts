@@ -20,6 +20,7 @@ import { clipboardSyncState } from '../services/sync/SyncState';
 class RemoteClipboardMonitorTask extends LongRunningTask {
   readonly name = 'remoteClipboardMonitor';
 
+  private _started = false;
   private _activeServer: ServerConfig | null = null;
   private _activePollingInterval: number | undefined = undefined;
 
@@ -32,17 +33,19 @@ class RemoteClipboardMonitorTask extends LongRunningTask {
     const config = await configService.getConfig();
     this._activeServer = server;
     this._activePollingInterval = config?.remotePollingInterval;
+    this._started = true;
     await remoteClipboardMonitor.connect();
   }
 
   async stop(): Promise<void> {
+    this._started = false;
     this._activeServer = null;
     this._activePollingInterval = undefined;
     await remoteClipboardMonitor.disconnect();
   }
 
   isRunning(): boolean {
-    return remoteClipboardMonitor.isConnected();
+    return this._started;
   }
 
   override async onConfigChanged(): Promise<void> {

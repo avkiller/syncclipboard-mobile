@@ -50,11 +50,15 @@ class ClipboardChangedHandler {
     if (!content.hasData && content.type === 'Text' && !content.profileHash && content.text) {
       content.profileHash = await calculateTextHash(content.text);
     }
-    clipboardSyncState.setRemoteContent(content);
 
     const currentHash = content.profileHash || content.text;
+
+    // 先更新远程剪贴板卡片，无论内容是否变化都立即反映到 UI
+    clipboardSyncState.setRemoteContent(content);
+
     const config = await configService.getConfig();
     const isFirstLoad = this.lastRemoteProfileHash === null;
+    if (currentHash === this.lastRemoteProfileHash) return;
     this.lastRemoteProfileHash = currentHash;
 
     let fileUri: string | undefined;

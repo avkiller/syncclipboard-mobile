@@ -14,7 +14,7 @@ export interface ClipboardSyncState {
   downloadProgress: ProgressDetail | null;
   uploadingClipboard: boolean;
   uploadProgress: ProgressDetail | null;
-  syncError: { title: string; message: string } | null;
+  syncError: { title: string } | null;
 }
 
 export type ClipboardSyncStateListener = (state: ClipboardSyncState) => void;
@@ -89,7 +89,7 @@ class ClipboardSyncStateManager {
   }
 
   /** 设置同步错误 */
-  setSyncError(error: { title: string; message: string } | null): void {
+  setSyncError(error: { title: string } | null): void {
     this.setState({ syncError: error });
   }
 
