@@ -1,6 +1,6 @@
 import { logger, consoleTransport } from 'react-native-logs';
 import { Paths, Directory, File } from 'expo-file-system';
-import { StorageAccessFramework } from 'expo-file-system/legacy';
+import { StorageAccessFramework, writeAsStringAsync } from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { nativeZipFiles } from 'native-util';
 import * as Application from 'expo-application';
@@ -74,12 +74,9 @@ const customFileTransport = (props: {
 
     const logLine = `${timestamp} ${level}${extension}: ${message}\n`;
 
-    if (logFile.exists) {
-      const existingContent = logFile.textSync() || '';
-      logFile.write(existingContent + logLine);
-    } else {
-      logFile.write(logLine);
-    }
+    writeAsStringAsync(logFile.uri, logLine, { append: true }).catch((error) => {
+      console.error('Failed to write log file:', error);
+    });
   } catch (error) {
     console.error('Failed to write log file:', error);
   }
