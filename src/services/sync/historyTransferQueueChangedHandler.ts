@@ -1,7 +1,6 @@
 import { type TransferTask } from '../history/HistoryTransferQueue';
 import { clipboardSyncState } from './SyncState';
 import { getHistoryFileUri } from '../../utils/fileStorage';
-import { configService } from '../ConfigService';
 import { getProfileId } from '@/utils';
 import { useLocalClipboardStore } from '../../stores/localClipboardStore';
 
@@ -68,11 +67,6 @@ async function handleDownloadTask(task: TransferTask): Promise<void> {
     );
     if (fileUri && fileUri !== currentRemote.fileUri) {
       clipboardSyncState.updateRemoteContentFileUri(fileUri);
-      const config = await configService.getConfig();
-      if (config?.syncToastEnabled !== false) {
-        const { ToastAndroid } = require('react-native');
-        ToastAndroid.show('文件已下载', ToastAndroid.SHORT);
-      }
     }
     clipboardSyncState.clearDownloadState();
   } else {

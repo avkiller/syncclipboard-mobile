@@ -294,16 +294,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             {clipboard.fileUri ? (
               <>
                 <Image
-                  key={`image-${clipboard.localClipboardHash?.substring(0, 12)}-${
-                    clipboard.timestamp
-                  }`}
+                  key={`image-${clipboard.fileUri}-${clipboard.localClipboardHash?.substring(0, 12)}`}
                   source={{
-                    uri: `${clipboard.fileUri}?hash=${
-                      clipboard.localClipboardHash?.substring(0, 12) ||
-                      clipboard.timestamp ||
-                      Date.now()
-                    }`,
-                    cache: 'reload',
+                    uri: clipboard.fileUri,
+                    cache: 'force-cache',
                   }}
                   style={styles.imagePreview}
                   resizeMode="contain"

@@ -208,6 +208,25 @@ export function historyItemToContent(item: HistoryItem): ClipboardContent {
 // ─── HistoryRecordDto ↔ ClipboardItem ────────────────────────────────────────
 
 /**
+ * 根据 HistoryRecordDto 推断数据文件名：
+ * - File / Image：使用 text 字段（服务器将文件名存入 text）
+ * - Text with hasData：生成 "<hash前8位>.txt"
+ * - 其他：undefined
+ */
+function getDataNameFromDto(dto: HistoryRecordDto): string | undefined {
+  if (!dto.hasData) return undefined;
+  switch (dto.type) {
+    case 'File':
+    case 'Image':
+      return dto.text || undefined;
+    case 'Text':
+      return `${dto.hash.substring(0, 8)}.txt`;
+    default:
+      return undefined;
+  }
+}
+
+/**
  * 将 HistoryRecordDto 转换为 ClipboardItem
  */
 export function dtoToHistoryItem(dto: HistoryRecordDto): HistoryItem {
@@ -216,6 +235,7 @@ export function dtoToHistoryItem(dto: HistoryRecordDto): HistoryItem {
     text: dto.text || '',
     profileHash: dto.hash,
     hasData: dto.hasData || false,
+    dataName: getDataNameFromDto(dto),
     size: dto.size ?? 0,
     timestamp: dto.createTime ? new Date(dto.createTime).getTime() : Date.now(),
     starred: dto.starred ?? false,

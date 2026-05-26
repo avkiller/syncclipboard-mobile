@@ -53,8 +53,12 @@ class ClipboardChangedHandler {
 
     const currentHash = content.profileHash || content.text;
 
-    // 先更新远程剪贴板卡片，无论内容是否变化都立即反映到 UI
-    clipboardSyncState.setRemoteContent(content);
+    // 仅在 hash 变化时更新 state，避免覆盖已下载的 fileUri 等状态
+    const stateRemote = clipboardSyncState.getState().remoteContent;
+    const stateHash = stateRemote?.profileHash || stateRemote?.text;
+    if (currentHash !== stateHash) {
+      clipboardSyncState.setRemoteContent(content);
+    }
 
     const config = await configService.getConfig();
     const isFirstLoad = this.lastRemoteProfileHash === null;

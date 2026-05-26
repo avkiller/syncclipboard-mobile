@@ -623,7 +623,7 @@ export class HistoryTransferQueue {
       historyDir.create();
     }
 
-    const fileName = item.type !== 'Text' && item.text ? item.text : 'data';
+    const fileName = item.dataName || (item.type !== 'Text' && item.text ? item.text : 'data');
     const destinationFile = new File(historyDir, fileName);
     const destinationUri = destinationFile.uri;
 
