@@ -154,7 +154,11 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     <View
       style={[
         styles.content,
-        overlayMode && [styles.overlayCard, { backgroundColor: theme.colors.surface }],
+        overlayMode && [
+          styles.overlayCard,
+          styles.overlayCardShadow,
+          { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow },
+        ],
       ]}
     >
       {state === 'loading' && (
@@ -522,5 +526,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     width: '85%',
     alignSelf: 'center',
+    elevation: 12,
+  },
+  overlayCardShadow: {
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
 });
