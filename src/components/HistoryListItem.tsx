@@ -340,8 +340,8 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                               : ''
                           }`
                         : isUploadTask
-                          ? '取消上传'
-                          : '取消下载'}
+                          ? t('history.cancelUpload')
+                          : t('history.cancelDownload')}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -375,10 +375,10 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                       ]}
                     >
                       {item.syncStatus === 1
-                        ? '已同步'
+                        ? t('history.syncStatusSynced')
                         : item.syncStatus === 0
-                          ? '仅本地'
-                          : '待同步'}
+                          ? t('history.syncStatusLocalOnly')
+                          : t('history.syncStatusPending')}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -407,7 +407,9 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                           },
                         ]}
                       >
-                        {item.synced ? '已同步' : '未同步'}
+                        {item.synced
+                          ? t('history.syncStatusSynced')
+                          : t('history.syncStatusNotSynced')}
                       </Text>
                     </View>
                   )}
@@ -434,7 +436,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                           },
                         ]}
                       >
-                        未下载
+                        {t('history.syncStatusNotDownloaded')}
                       </Text>
                     </TouchableOpacity>
                   )}

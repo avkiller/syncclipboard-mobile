@@ -26,6 +26,7 @@ const zh = {
     later: '稍后再说',
     confirmEnable: '确认开启',
     serverNotConfigured: '请先在设置中配置服务器',
+    shareFile: '分享文件',
     // 时间格式
     timeJustNow: '刚刚',
     timeMinutesAgo: '{{minutes}} 分钟前',
@@ -74,6 +75,8 @@ const zh = {
     empty: '剪贴板为空',
     emptyHint: '复制内容后将在此显示',
     imageFileLabel: '图片文件',
+    imageFallback: '图片',
+    fileFallback: '文件',
     openLink: '打开链接',
     wordPick: '分词',
     open: '打开',

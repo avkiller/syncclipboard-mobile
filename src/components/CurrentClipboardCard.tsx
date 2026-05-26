@@ -169,10 +169,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       return clipboard.text;
     }
     if (clipboard.type === 'Image') {
-      return clipboard.fileName || '图片';
+      return clipboard.fileName || t('clipboard.imageFallback');
     }
     if (clipboard.type === 'File') {
-      return clipboard.fileName || '文件';
+      return clipboard.fileName || t('clipboard.fileFallback');
     }
     return '';
   };

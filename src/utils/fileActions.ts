@@ -122,7 +122,7 @@ export async function shareFile(fileUri: string, fileName?: string): Promise<voi
   const mimeType = getMimeTypeFromUri(fileUri);
   await Sharing.shareAsync(fileUri, {
     mimeType,
-    dialogTitle: fileName || '分享文件',
+    dialogTitle: fileName || i18n.t('common.shareFile'),
     UTI: mimeType,
   });
 }

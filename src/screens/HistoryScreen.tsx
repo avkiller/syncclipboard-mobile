@@ -654,9 +654,10 @@ export function HistoryScreen() {
                 await syncService.syncIncremental();
               } catch (error) {
                 console.error('[HistoryScreen] Failed to incremental sync:', error);
-                const errorMessage = error instanceof Error ? error.message : '未知错误';
+                const errorMessage =
+                  error instanceof Error ? error.message : t('common.unknownError');
                 setError({
-                  title: '历史记录增量同步失败',
+                  title: t('history.incrementalSyncFailedTitle'),
                   message: errorMessage,
                 });
               } finally {
