@@ -82,14 +82,15 @@ export interface HistoryItem {
   /** 是否置顶 */
   pinned: boolean;
 
-  /** 本地数据是否就绪（false表示仅有元数据） */
-  isLocalFileReady: boolean;
-
   /** 来源设备 */
   from?: string;
 
   /** 远程是否有数据（服务器HasData字段） */
   hasRemoteData?: boolean;
+}
+
+export function isLocalFileReady(item: HistoryItem): boolean {
+  return !item.hasData || !!item.fileUri;
 }
 
 /**
@@ -98,14 +99,7 @@ export interface HistoryItem {
 export function createHistoryItem(
   base: Omit<
     HistoryItem,
-    | 'starred'
-    | 'syncStatus'
-    | 'version'
-    | 'lastModified'
-    | 'lastAccessed'
-    | 'isDeleted'
-    | 'pinned'
-    | 'isLocalFileReady'
+    'starred' | 'syncStatus' | 'version' | 'lastModified' | 'lastAccessed' | 'isDeleted' | 'pinned'
   > &
     Partial<
       Pick<
@@ -117,7 +111,6 @@ export function createHistoryItem(
         | 'lastAccessed'
         | 'isDeleted'
         | 'pinned'
-        | 'isLocalFileReady'
       >
     >
 ): HistoryItem {
@@ -130,7 +123,6 @@ export function createHistoryItem(
     lastAccessed: now,
     isDeleted: false,
     pinned: false,
-    isLocalFileReady: true,
     ...base,
   };
 }

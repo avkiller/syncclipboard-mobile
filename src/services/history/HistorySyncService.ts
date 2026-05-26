@@ -8,7 +8,7 @@ import { HistoryRecordDto, HistoryRecordUpdateDto, ProfileTypeFilter } from '@/t
 import { dtoToHistoryItem } from '@/utils/clipboard/convert';
 import { SyncConflictError, RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
-import { HistoryItem, HistorySyncStatus } from '@/types/clipboard';
+import { HistoryItem, HistorySyncStatus, isLocalFileReady } from '@/types/clipboard';
 import { ServerConfig } from '@/types/api';
 import { getSignalRClient, type HistoryChangedEvent } from 'signalr-client';
 import { historyService } from './HistoryService';
@@ -466,7 +466,6 @@ export class HistorySyncService {
               lastModified: remoteModified,
               syncStatus: HistorySyncStatus.Synced,
               hasRemoteData: remoteRecord.hasData,
-              isLocalFileReady: localItem.isLocalFileReady,
               fileUri: localItem.fileUri,
               isDeleted: remoteRecord.isDeleted || false,
             },
@@ -474,13 +473,10 @@ export class HistorySyncService {
           remoteUpdatedCount++;
         } else if (isLocalNewer) {
           // 本地更新，标记为需要同步
-          // 但 hasData === true 的记录无法上传，保持 LocalOnly
           itemsToUpdate.push({
             profileHash: localItem.profileHash,
             updates: {
-              syncStatus: localItem.hasData
-                ? HistorySyncStatus.LocalOnly
-                : HistorySyncStatus.NeedSync,
+              syncStatus: HistorySyncStatus.NeedSync,
             },
           });
           if (!localItem.hasData) {
@@ -543,7 +539,7 @@ export class HistorySyncService {
 
       // 只处理已同步的记录或本地无数据的记录
       const isSynced = localItem.syncStatus === HistorySyncStatus.Synced;
-      const isServerOnly = localItem.isLocalFileReady === false;
+      const isServerOnly = !isLocalFileReady(localItem);
 
       if (!isSynced && !isServerOnly) {
         continue;
@@ -557,7 +553,7 @@ export class HistorySyncService {
           console.log(
             `[HistorySyncService] Orphan record deleted (no local data): ${localItem.profileHash}`
           );
-        } else if (localItem.isLocalFileReady) {
+        } else if (isLocalFileReady(localItem)) {
           // 本地有数据，标记为 LocalOnly
           await this.historyStorage.updateSyncStatus(
             localItem.profileHash,
@@ -701,7 +697,6 @@ export class HistorySyncService {
         : Date.now(),
       syncStatus: HistorySyncStatus.Synced,
       hasRemoteData: serverRecord.hasData,
-      isLocalFileReady: local.isLocalFileReady,
       fileUri: local.fileUri,
       isDeleted: serverRecord.isDeleted,
     });
@@ -878,7 +873,6 @@ export class HistorySyncService {
           version: record.version || 0,
           lastModified: record.lastModified ? new Date(record.lastModified).getTime() : Date.now(),
           syncStatus: HistorySyncStatus.Synced,
-          isLocalFileReady: false,
         });
         console.log(`[HistorySyncService] Remote record deleted: ${record.hash}`);
       }
@@ -909,7 +903,6 @@ export class HistorySyncService {
             lastModified: remoteModified,
             syncStatus: HistorySyncStatus.Synced,
             hasRemoteData: record.hasData,
-            isLocalFileReady: localItem.isLocalFileReady,
             fileUri: localItem.fileUri,
             isDeleted: false,
           });
@@ -1054,7 +1047,7 @@ export class HistorySyncService {
       }
 
       const hasRemoteData = item.hasRemoteData === true;
-      const noLocalData = item.isLocalFileReady === false;
+      const noLocalData = !isLocalFileReady(item);
 
       if (hasRemoteData && noLocalData) {
         toDeleteHashes.push(item.profileHash);

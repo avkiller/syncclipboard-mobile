@@ -6,7 +6,7 @@
 import type { IHistoryAPI } from '@/api/history';
 import { RecordNotFoundError } from '@/errors';
 import { HistoryStorage } from '../../storage/HistoryStorage';
-import { HistorySyncStatus, type ClipboardContent } from '@/types/clipboard';
+import { HistorySyncStatus, type ClipboardContent, isLocalFileReady } from '@/types/clipboard';
 import { getHistoryFileDir } from '@/utils/fileStorage';
 import { historyItemToContent } from '@/utils/clipboard/convert';
 import { File } from 'expo-file-system';
@@ -616,7 +616,7 @@ export class HistoryTransferQueue {
     console.log(`[HistoryTransferQueue] Item type: ${item.type}`);
     console.log(`[HistoryTransferQueue] Item text (fileName): ${item.text}`);
     console.log(`[HistoryTransferQueue] Item hasRemoteData: ${item.hasRemoteData}`);
-    console.log(`[HistoryTransferQueue] Item isLocalFileReady: ${item.isLocalFileReady}`);
+    console.log(`[HistoryTransferQueue] Item isLocalFileReady: ${isLocalFileReady(item)}`);
 
     const historyDir = getHistoryFileDir(item.type, parsed.hash);
     if (!historyDir.exists) {
@@ -656,7 +656,6 @@ export class HistoryTransferQueue {
 
     await this.historyStorage.updateItem(parsed.hash, {
       fileUri: destinationUri,
-      isLocalFileReady: true,
     });
 
     console.log(`[HistoryTransferQueue] Download task completed: ${task.profileId}`);

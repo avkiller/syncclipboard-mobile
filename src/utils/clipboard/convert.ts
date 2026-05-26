@@ -246,7 +246,6 @@ export function dtoToHistoryItem(dto: HistoryRecordDto): HistoryItem {
     lastAccessed: dto.lastAccessed ? new Date(dto.lastAccessed).getTime() : Date.now(),
     isDeleted: dto.isDeleted ?? false,
     hasRemoteData: dto.hasData ?? false,
-    isLocalFileReady: false,
   };
 }
 

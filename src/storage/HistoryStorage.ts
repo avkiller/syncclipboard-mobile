@@ -4,7 +4,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { HistoryItem, HistorySyncStatus } from '../types/clipboard';
+import { HistoryItem, HistorySyncStatus, isLocalFileReady } from '../types/clipboard';
 import { HistoryFilter, HistorySort, STORAGE_KEYS } from '../types/storage';
 import { getHistoryFileDir } from '../utils/fileStorage';
 import { File, Directory } from 'expo-file-system';
@@ -26,22 +26,14 @@ type MigrationFunction = (items: HistoryItem[]) => HistoryItem[];
  * value: 从上一版本迁移到目标版本的函数
  */
 const MIGRATIONS: Record<number, MigrationFunction> = {
-  // v0 -> v1: 添加 syncStatus, isLocalFileReady, lastAccessed 字段
+  // v0 -> v1: 添加 syncStatus, lastAccessed 字段
   1: (items: HistoryItem[]): HistoryItem[] => {
     return items.map((item) => {
       const migratedItem = { ...item };
 
       // 设置同步状态默认值
       if (migratedItem.syncStatus === undefined) {
-        if (migratedItem.fileUri || !migratedItem.hasData) {
-          migratedItem.isLocalFileReady = true;
-        }
         migratedItem.syncStatus = HistorySyncStatus.LocalOnly;
-      }
-
-      // 设置 isLocalFileReady 默认值
-      if (migratedItem.isLocalFileReady === undefined) {
-        migratedItem.isLocalFileReady = !!(migratedItem.fileUri || !migratedItem.hasData);
       }
 
       // 设置 lastAccessed 默认值
@@ -88,7 +80,6 @@ function normalizeClipboardItem(item: HistoryItem): HistoryItem {
     lastAccessed: item.lastAccessed ?? Date.now(),
     isDeleted: item.isDeleted ?? false,
     pinned: item.pinned ?? false,
-    isLocalFileReady: item.isLocalFileReady ?? true,
     from: item.from,
     hasRemoteData: item.hasRemoteData ?? false,
   };
@@ -507,7 +498,6 @@ export class HistoryStorage {
         ...existing,
         text,
         fileUri: processedItem.fileUri ?? existing.fileUri,
-        isLocalFileReady: !processedItem.hasData || !!(processedItem.fileUri ?? existing.fileUri),
         isDeleted: false,
         lastModified: Date.now(),
         lastAccessed: Date.now(),
@@ -567,7 +557,6 @@ export class HistoryStorage {
           ...existing,
           text,
           fileUri: item.fileUri ?? existing.fileUri,
-          isLocalFileReady: !item.hasData || !!(item.fileUri ?? existing.fileUri),
           isDeleted: false,
           lastModified: Date.now(),
           lastAccessed: Date.now(),
@@ -717,7 +706,7 @@ export class HistoryStorage {
       }
 
       if (filter.localOnly) {
-        filtered = filtered.filter((item) => item.isLocalFileReady === true);
+        filtered = filtered.filter((item) => isLocalFileReady(item));
       }
 
       if (filter.syncStatus && filter.syncStatus.length > 0) {
@@ -863,7 +852,6 @@ export class HistoryStorage {
         lastModified: Date.now(),
         version: item.version + 1,
         syncStatus: HistorySyncStatus.NeedSync,
-        isLocalFileReady: false,
       };
 
       await this.saveHistory();
@@ -907,7 +895,6 @@ export class HistoryStorage {
           lastModified: now,
           version: (item.version || 0) + 1,
           syncStatus: HistorySyncStatus.NeedSync,
-          isLocalFileReady: false,
         };
         updatedItems.push(this.history[i]);
       }
@@ -1225,7 +1212,7 @@ export class HistoryStorage {
 
     const { HistorySyncStatus } = await import('../types/clipboard');
     return this.history.filter(
-      (item) => item.syncStatus === HistorySyncStatus.Synced && item.isLocalFileReady === false
+      (item) => item.syncStatus === HistorySyncStatus.Synced && !isLocalFileReady(item)
     );
   }
 
@@ -1319,7 +1306,7 @@ export class HistoryStorage {
       }
 
       // 仅服务器记录数
-      if (item.syncStatus === HistorySyncStatus.Synced && item.isLocalFileReady === false) {
+      if (item.syncStatus === HistorySyncStatus.Synced && !isLocalFileReady(item)) {
         stats.serverOnly++;
       }
     });

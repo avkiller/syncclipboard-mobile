@@ -43,7 +43,6 @@ function createItem(
     lastAccessed: timestamp,
     isDeleted: false,
     pinned: false,
-    isLocalFileReady: true,
     ...overrides,
   };
 }

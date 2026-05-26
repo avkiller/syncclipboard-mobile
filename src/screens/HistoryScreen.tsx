@@ -32,7 +32,12 @@ import { useSettingsStore } from '@/stores';
 import { historyStorage } from '@/storage';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { useHistoryDisplaySettings } from '@/hooks/useHistoryDisplaySettings';
-import { HistoryItem, ClipboardContent, createHistoryItem } from '@/types/clipboard';
+import {
+  HistoryItem,
+  ClipboardContent,
+  createHistoryItem,
+  isLocalFileReady,
+} from '@/types/clipboard';
 import { HistoryFilter } from '@/types/storage';
 import { HistoryListItem } from '@/components/HistoryListItem';
 import { MessageToast } from '@/components/MessageToast';
@@ -760,7 +765,7 @@ export function HistoryScreen() {
       console.log(`[HistoryScreen] Item type: ${item.type}`);
       console.log(`[HistoryScreen] Item dataName: ${item.dataName}`);
       console.log(`[HistoryScreen] Item hasRemoteData: ${item.hasRemoteData}`);
-      console.log(`[HistoryScreen] Item isLocalFileReady: ${item.isLocalFileReady}`);
+      console.log(`[HistoryScreen] Item isLocalFileReady: ${isLocalFileReady(item)}`);
 
       if (!getHistorySyncService().isInitialized()) {
         showMessage(t('history.syncNotEnabled'), 'error');
@@ -785,7 +790,7 @@ export function HistoryScreen() {
       console.log(`[HistoryScreen] ========== Upload Button Clicked ==========`);
       console.log(`[HistoryScreen] Item profileHash: ${item.profileHash}`);
       console.log(`[HistoryScreen] Item type: ${item.type}`);
-      console.log(`[HistoryScreen] Item isLocalFileReady: ${item.isLocalFileReady}`);
+      console.log(`[HistoryScreen] Item isLocalFileReady: ${isLocalFileReady(item)}`);
       console.log(`[HistoryScreen] Item syncStatus: ${item.syncStatus}`);
 
       if (!getHistorySyncService().isInitialized()) {

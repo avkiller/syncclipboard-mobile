@@ -9,7 +9,7 @@ import { Copy, Download, Share, Link2, Scissors } from 'react-native-feather';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StarIcon } from './StarIcon';
 import { useTheme } from '@/hooks/useTheme';
-import { HistoryItem } from '@/types/clipboard';
+import { HistoryItem, isLocalFileReady } from '@/types/clipboard';
 import { useTransferQueueStore } from '@/stores/transferQueueStore';
 import { getHistoryTransferQueue } from '@/services/history/HistoryTransferQueue';
 import { getProfileId, formatSizeWithType, formatFileSize } from '@/utils';
@@ -64,6 +64,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
     const { theme } = useTheme();
     const { t } = useTranslation();
     const tasks = useTransferQueueStore((state) => state.tasks);
+    const localFileReady = isLocalFileReady(item);
 
     // 响应式读取自动下载设置，变化时触发 effect 重新执行
     const imageAutoDownload = useSettingsStore(
@@ -78,7 +79,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
 
     useEffect(() => {
       if (autoDownloadTriggered.current) return;
-      if (item.type !== 'Image' || item.isLocalFileReady !== false || !item.hasRemoteData) return;
+      if (item.type !== 'Image' || localFileReady || !item.hasRemoteData) return;
       if (!enableHistorySync) return;
       if (imageAutoDownload === 'off') return;
 
@@ -101,7 +102,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
       doAutoDownload();
     }, [
       item.profileHash,
-      item.isLocalFileReady,
+      localFileReady,
       item.type,
       item.hasRemoteData,
       enableHistorySync,
@@ -268,7 +269,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
             {/* 预览文本 - 另起一行（文本类型始终显示，图片/文件类型在本地文件未就绪时显示） */}
             {(item.type === 'Text' ||
               item.type === 'File' ||
-              (item.type === 'Image' && item.isLocalFileReady === false)) && (
+              (item.type === 'Image' && !localFileReady)) && (
               <Text
                 style={[styles.previewText, { color: theme.colors.text }]}
                 numberOfLines={10}
@@ -417,7 +418,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                 {enableHistorySync &&
                   !isTransferring &&
                   (item.type === 'Image' || item.type === 'File') &&
-                  item.isLocalFileReady === false && (
+                  !localFileReady && (
                     <TouchableOpacity
                       style={styles.syncBadge}
                       onPress={() => onDownload?.(item)}
@@ -519,7 +520,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         <Download width={15} height={15} color={theme.colors.primary} />
                       </TouchableOpacity>
                     )}
-                    {item.isLocalFileReady !== false && (
+                    {localFileReady && (
                       <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => onShare(item)}
@@ -567,7 +568,7 @@ export const HistoryListItem = forwardRef<object, HistoryListItemProps>(
                         <Download width={15} height={15} color={theme.colors.primary} />
                       </TouchableOpacity>
                     )}
-                    {item.isLocalFileReady !== false && (
+                    {localFileReady && (
                       <TouchableOpacity
                         style={styles.actionButton}
                         onPress={() => onShare(item)}

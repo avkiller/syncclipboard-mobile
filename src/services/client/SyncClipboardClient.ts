@@ -19,7 +19,6 @@ export async function downloadForSyncClipboard(
     const historyItem = clipboardContentToItem(remoteContent, {
       syncStatus: HistorySyncStatus.NeedSync,
       hasRemoteData: true,
-      isLocalFileReady: false,
     });
     await historyService.addItem(historyItem);
   } catch (e) {

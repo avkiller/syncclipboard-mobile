@@ -61,7 +61,6 @@ export class HistoryService {
       hasRemoteData: hasData,
       fileUri,
       syncStatus: HistorySyncStatus.Synced,
-      isLocalFileReady: !hasData || !!fileUri,
     });
 
     return historyStorage.addItem(historyItem);
@@ -105,7 +104,6 @@ export class HistoryService {
       hasRemoteData: false,
       fileUri,
       syncStatus: HistorySyncStatus.LocalOnly,
-      isLocalFileReady: !content.hasData || !!fileUri,
     });
 
     return historyStorage.addItem(historyItem);
