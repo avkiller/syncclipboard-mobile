@@ -1,5 +1,7 @@
 # SyncClipboard Mobile
 
+中文 | [English](README_EN.md)
+
 SyncClipboard 的移动客户端，暂时仅支持 Android
 
 ## 功能特性
