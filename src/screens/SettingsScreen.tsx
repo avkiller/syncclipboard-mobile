@@ -47,6 +47,7 @@ import {
   formatFileSize,
 } from '@/utils';
 import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
 import {
   isShizukuAvailable,
@@ -2647,21 +2648,15 @@ export const SettingsScreen = () => {
 
             <View style={styles.settingRowNoBorder}>
               <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
                   {t('settings.openSource')}
                 </Text>
               </View>
               <TouchableOpacity
-                style={[
-                  styles.updateButton,
-                  {
-                    backgroundColor: theme.colors.primary,
-                    borderColor: theme.colors.primary,
-                  },
-                ]}
                 onPress={() => Linking.openURL('https://github.com/Jeric-X/syncclipboard-mobile')}
+                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
               >
-                <Text style={[styles.updateButtonText, { color: theme.colors.white }]}>GitHub</Text>
+                <MaterialCommunityIcons name="github" size={24} color={theme.colors.textTertiary} />
               </TouchableOpacity>
             </View>
           </View>
