@@ -76,6 +76,7 @@ export const SettingsScreen = () => {
     setAutoCheckUpdate,
     setLastUpdateCheckDate,
     setUpdateToBeta,
+    setUpdateChannel,
     setEnableHistorySync,
     setLogLevel,
     setRemotePollingInterval,
@@ -103,6 +104,9 @@ export const SettingsScreen = () => {
   );
   const [localUpdateToBetaEnabled, setLocalUpdateToBetaEnabled] = useState(
     config?.updateToBeta ?? false
+  );
+  const [localUpdateChannel, setLocalUpdateChannel] = useState<'github' | 'gitee'>(
+    config?.updateChannel ?? 'github'
   );
   const [localHistorySyncEnabled, setLocalHistorySyncEnabled] = useState(
     config?.enableHistorySync ?? false
@@ -143,6 +147,7 @@ export const SettingsScreen = () => {
   const [showLogLevelMenu, setShowLogLevelMenu] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
+  const [showUpdateChannelMenu, setShowUpdateChannelMenu] = useState(false);
   const [localHideFromRecents, setLocalHideFromRecents] = useState(
     config?.hideFromRecents ?? false
   );
@@ -192,6 +197,10 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalUpdateToBetaEnabled(config?.updateToBeta ?? false);
   }, [config?.updateToBeta]);
+
+  useEffect(() => {
+    setLocalUpdateChannel(config?.updateChannel ?? 'github');
+  }, [config?.updateChannel]);
 
   useEffect(() => {
     setLocalHistorySyncEnabled(config?.enableHistorySync ?? true);
@@ -939,7 +948,16 @@ export const SettingsScreen = () => {
     }
   };
 
-  // 处理切换历史记录同步
+  const handleToggleUpdateChannel = async (channel: 'github' | 'gitee') => {
+    setLocalUpdateChannel(channel);
+    try {
+      await setUpdateChannel(channel);
+    } catch (error: unknown) {
+      setLocalUpdateChannel(channel === 'github' ? 'gitee' : 'github');
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
   const handleToggleHistorySync = async (enabled: boolean) => {
     try {
       const { getHistorySyncService } = await import('@/services/history/HistorySyncService');
@@ -1014,14 +1032,15 @@ export const SettingsScreen = () => {
       const today = new Date().toISOString().slice(0, 10);
       await setLastUpdateCheckDate(today);
       const useBeta = includeBeta ?? config?.updateToBeta ?? false;
-      const result = await checkForUpdate(appVersion, useBeta);
+      const channel = config?.updateChannel ?? 'github';
+      const result = await checkForUpdate(appVersion, useBeta, channel);
       if (result.hasUpdate) {
         setUpdateAvailable(true);
         setLatestVersion(result.latestVersion);
         latestAssetsRef.current = result.assets;
         latestTagRef.current = result.tagName;
         releaseNotesRef.current = result.releaseNotes;
-        showDownloadSourceDialog(result.latestVersion, result.assets, result.releaseNotes);
+        showUpdateDialog(result.latestVersion, result.assets, result.releaseNotes);
       } else {
         setUpdateAvailable(false);
         setLatestVersion(null);
@@ -1029,7 +1048,6 @@ export const SettingsScreen = () => {
           showMessage(t('settings.alreadyLatest'), 'success');
         }
       }
-      // 无论是否有更新，清除当前版本及旧版本的 APK 缓存
       cleanOldApkCache(appVersion);
     } catch {
       if (showNoUpdateToast) {
@@ -1059,7 +1077,7 @@ export const SettingsScreen = () => {
 
     const asset = findAssetForAbi(assets, preferredAbi as Parameters<typeof findAssetForAbi>[1]);
     if (!asset) {
-      showDownloadSourceDialog(version, assets, releaseNotes);
+      showUpdateDialog(version, assets, releaseNotes);
       return;
     }
 
@@ -1068,32 +1086,30 @@ export const SettingsScreen = () => {
     if (cached) {
       await installApk(cached);
     } else {
-      showDownloadSourceDialog(version, assets, releaseNotes);
+      showUpdateDialog(version, assets, releaseNotes);
     }
   };
 
-  // 弹出选择下载渠道的对话框
-  const showDownloadSourceDialog = (
-    version: string,
-    assets: ReleaseAssetInfo[],
-    releaseNotes?: string
-  ) => {
+  const showUpdateDialog = (version: string, assets: ReleaseAssetInfo[], releaseNotes?: string) => {
+    const channel = config?.updateChannel ?? 'github';
+    const channelName = channel === 'github' ? 'GitHub' : 'Gitee';
     const body = releaseNotes
-      ? t('settings.newVersionMessage', {
+      ? t('settings.newVersionMessageWithChannel', {
           newVersion: version,
           currentVersion: appVersion,
+          channel: channelName,
           notes: releaseNotes,
         })
-      : t('settings.newVersionMessageNoNotes', { newVersion: version, currentVersion: appVersion });
+      : t('settings.newVersionMessageNoNotesWithChannel', {
+          newVersion: version,
+          currentVersion: appVersion,
+          channel: channelName,
+        });
     Alert.alert(t('settings.newVersionTitle'), body, [
       { text: t('common.later'), style: 'cancel' },
       {
-        text: t('settings.downloadGitee'),
-        onPress: () => handleDownloadApk('gitee', version, assets),
-      },
-      {
-        text: t('settings.downloadGitHub'),
-        onPress: () => handleDownloadApk('github', version, assets),
+        text: t('settings.updateNow'),
+        onPress: () => handleDownloadApk(channel, version, assets),
       },
     ]);
   };
@@ -2517,22 +2533,6 @@ export const SettingsScreen = () => {
                             : t('settings.checkUpdate')}
                     </Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.updateButton,
-                      {
-                        backgroundColor: theme.colors.primary,
-                        borderColor: theme.colors.primary,
-                      },
-                    ]}
-                    onPress={() =>
-                      Linking.openURL('https://github.com/Jeric-X/syncclipboard-mobile')
-                    }
-                  >
-                    <Text style={[styles.updateButtonText, { color: theme.colors.white }]}>
-                      GitHub
-                    </Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -2567,6 +2567,102 @@ export const SettingsScreen = () => {
                   localUpdateToBetaEnabled ? theme.colors.surface : theme.colors.textTertiary
                 }
               />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
+              onPress={() => setShowUpdateChannelMenu(!showUpdateChannelMenu)}
+            >
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                {t('settings.updateChannel')}
+              </Text>
+              <View style={styles.dropdownValue}>
+                <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
+                  {localUpdateChannel === 'github' ? 'GitHub' : 'Gitee'}
+                </Text>
+                {showUpdateChannelMenu ? (
+                  <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
+                ) : (
+                  <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
+                )}
+              </View>
+            </TouchableOpacity>
+
+            {showUpdateChannelMenu && (
+              <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownItem,
+                    {
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: theme.colors.divider,
+                    },
+                  ]}
+                  onPress={() => {
+                    handleToggleUpdateChannel('gitee');
+                    setShowUpdateChannelMenu(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      {
+                        color:
+                          localUpdateChannel === 'gitee' ? theme.colors.primary : theme.colors.text,
+                      },
+                    ]}
+                  >
+                    Gitee
+                  </Text>
+                  {localUpdateChannel === 'gitee' && (
+                    <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    handleToggleUpdateChannel('github');
+                    setShowUpdateChannelMenu(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      {
+                        color:
+                          localUpdateChannel === 'github'
+                            ? theme.colors.primary
+                            : theme.colors.text,
+                      },
+                    ]}
+                  >
+                    GitHub
+                  </Text>
+                  {localUpdateChannel === 'github' && (
+                    <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.settingRowNoBorder}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                  {t('settings.openSource')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.updateButton,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    borderColor: theme.colors.primary,
+                  },
+                ]}
+                onPress={() => Linking.openURL('https://github.com/Jeric-X/syncclipboard-mobile')}
+              >
+                <Text style={[styles.updateButtonText, { color: theme.colors.white }]}>GitHub</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>

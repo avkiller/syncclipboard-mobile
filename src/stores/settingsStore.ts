@@ -98,6 +98,9 @@ interface SettingsState {
   /** 设置是否更新到测试版 */
   setUpdateToBeta: (enabled: boolean) => Promise<void>;
 
+  /** 设置更新通道 */
+  setUpdateChannel: (channel: 'github' | 'gitee') => Promise<void>;
+
   /** 设置是否启用历史记录同步 */
   setEnableHistorySync: (enabled: boolean) => Promise<void>;
 
@@ -316,6 +319,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setUpdateToBeta: async (enabled: boolean) => {
     await get().updateConfig({ updateToBeta: enabled });
+  },
+
+  setUpdateChannel: async (channel: 'github' | 'gitee') => {
+    await get().updateConfig({ updateChannel: channel });
   },
 
   setEnableHistorySync: async (enabled: boolean) => {
