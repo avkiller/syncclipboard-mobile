@@ -115,3 +115,7 @@ npm run plugin:build
 | [RikkaApps/Shizuku](https://github.com/RikkaApps/Shizuku)                                                             | Shizuku API: System API access without root  |
 | [dotnet/aspnetcore (SignalR Java Client)](https://github.com/dotnet/aspnetcore)                                       | SignalR real-time push (Java/Android client) |
 | [google/gson](https://github.com/google/gson)                                                                         | JSON serialization (SignalR protocol layer)  |
+
+## Donate
+
+If SyncClipboard helps you, donations are welcome to support ongoing maintenance. View donation details [here](https://github.com/Jeric-X/SyncClipboard/blob/master/docs/donate.md).
