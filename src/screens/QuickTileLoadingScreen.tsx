@@ -54,8 +54,8 @@ export const QuickTileLoadingScreen: React.FC<QuickTileLoadingScreenProps> = ({
         content = await fetchRemoteClipboard(signal);
         if (content.hasData) {
           setPreviewText(content.text);
-          content = await setLocalClipboardFromRemote((info) => setProgress(info), signal, content);
         }
+        content = await setLocalClipboardFromRemote((info) => setProgress(info), signal, content);
 
         if (content && content.type !== 'Text' && content.fileUri) {
           setFileContent(content);
