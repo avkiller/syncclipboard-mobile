@@ -8,6 +8,7 @@ import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
 import { clipboardSyncState } from './SyncState';
 import { clipboardMonitor } from '../clipboard/ClipboardMonitor';
 import { localClipboard } from '../clipboard/LocalClipboard';
+import { getClipboardChangedHandler } from './ClipboardChangedHandler';
 import { DedupedOperation } from '@/utils/DedupedOperation';
 import { File } from 'expo-file-system';
 import i18n from '@/i18n';
@@ -40,6 +41,13 @@ export async function setRemoteClipboard(
   signal: AbortSignal,
   onProgress?: (info: ProgressInfo) => void
 ): Promise<boolean> {
+  // 设置临时忽略 hash，防止上传的内容被立即下载回来（竞态条件）
+  const profileHash = content.profileHash || content.text;
+  const handler = getClipboardChangedHandler();
+  if (profileHash) {
+    handler.setIgnoreHash(profileHash);
+  }
+
   return _uploadOp.execute(content, onProgress, signal, async (sig, notify) => {
     if (sig.aborted) throw new DOMException('Aborted', 'AbortError');
 
@@ -50,7 +58,16 @@ export async function setRemoteClipboard(
 
     await getClientService().setRemoteClipboard(content, notify, sig);
 
+    // 上传完成后，更新 remoteContent
     clipboardSyncState.setRemoteContent(content);
+
+    // 如果 ignoreHash 还存在，说明远程内容还没到达，需要设置 lastRemoteProfileHash
+    // 如果 ignoreHash 已清除，说明远程内容已到达并处理，lastRemoteProfileHash 已设置
+    if (profileHash && handler.getIgnoreHash()) {
+      handler.setLastRemoteProfileHash(profileHash);
+      handler.clearIgnoreHash();
+    }
+
     return true;
   });
 }
