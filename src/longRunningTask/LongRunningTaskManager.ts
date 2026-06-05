@@ -228,6 +228,6 @@ longRunningTaskManager.register(clipboardMonitorTask, true);
 longRunningTaskManager.register(remoteClipboardMonitorTask, true);
 longRunningTaskManager.register(historyTrackerTask, true);
 longRunningTaskManager.register(foregroundServiceTask);
-longRunningTaskManager.register(historySyncTask);
+longRunningTaskManager.register(historySyncTask, true);
 longRunningTaskManager.register(clipboardSyncTask);
 longRunningTaskManager.register(heartbeatTask);
