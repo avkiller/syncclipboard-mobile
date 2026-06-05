@@ -34,6 +34,7 @@
       "./plugins/build/withQuickSettingsTileManifest.js",
       "./plugins/build/withProcessTextManifest.js",
       "./plugins/build/withQuickActionActivity.js",
+      "./plugins/build/withShareActivity.js",
       "./plugins/build/withServiceRestartActivity.js",
       "./plugins/build/withAndroidNativeCode.js",
       "./plugins/build/withClipboardOverlayPermission.js",
@@ -48,7 +49,7 @@
         "expo-sharing",
         {
           "android": {
-            "enabled": true,
+            "enabled": false,
             "singleShareMimeTypes": ["*/*"]
           }
         }

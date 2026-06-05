@@ -18,8 +18,17 @@ import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import type { ProgressInfo } from 'native-util';
 
+// Debug logging
+const DEBUG = true;
+function log(...args: unknown[]) {
+  if (DEBUG) {
+    console.log('[ShareReceiveScreen]', ...args);
+  }
+}
+
 interface ShareReceiveScreenProps {
   onComplete: () => void;
+  overlayMode?: boolean;
 }
 
 function getFileExtFromMime(mimeType: string | null | undefined): string {
@@ -34,22 +43,37 @@ function getFileExtFromMime(mimeType: string | null | undefined): string {
   return `.${sub}`;
 }
 
-export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComplete }) => {
+export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({
+  onComplete,
+  overlayMode = false,
+}) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
 
   const { resolvedSharedPayloads, isResolving, error: resolveError } = useIncomingShare();
   // 挂载时同步读取原始 payload，避免 hook 异步初始化导致误判"没有内容"
-  const [hasShareContent] = useState(() => getSharedPayloads().length > 0);
+  const [hasShareContent] = useState(() => {
+    const payloads = getSharedPayloads();
+    log('Initial getSharedPayloads():', payloads);
+    return payloads.length > 0;
+  });
   const activeServer = useSettingsStore((s) => s.getActiveServer());
   const [loadingText, setLoadingText] = useState(() => t('shareReceive.processingFile'));
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
   const [previewText, setPreviewText] = useState<string | undefined>(undefined);
   const [previewImage, setPreviewImage] = useState<string | undefined>(undefined);
 
+  // Debug: Log resolved payloads
+  useEffect(() => {
+    log('resolvedSharedPayloads:', resolvedSharedPayloads);
+    log('isResolving:', isResolving);
+    log('resolveError:', resolveError);
+  }, [resolvedSharedPayloads, isResolving, resolveError]);
+
   // 挂载时若根本没有分享内容，直接返回
   useEffect(() => {
     if (!hasShareContent) {
+      log('No share content, exiting');
       clearSharedPayloads();
       onComplete();
     }
@@ -115,7 +139,7 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
     return (
       <ResolvingView
         text={t('shareReceive.resolving')}
-        backgroundColor={theme.colors.surface}
+        backgroundColor={overlayMode ? theme.colors.backdrop : theme.colors.surface}
         textColor={theme.colors.text}
         primaryColor={theme.colors.primary}
         onBack={onComplete}
@@ -133,6 +157,7 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
       progress={progress}
       previewText={previewText}
       previewImage={previewImage}
+      overlayMode={overlayMode}
     />
   );
 };

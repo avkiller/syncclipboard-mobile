@@ -3,6 +3,11 @@
  * Lightweight RN root component for the transparent QuickActionActivity.
  * Renders only a semi-transparent overlay with the sync progress card.
  * Registered as "quickAction" in the AppRegistry (separate from "main").
+ *
+ * Supports three modes:
+ * 1. Quick tile mode (direction): download/upload from quick settings tile
+ * 2. Process text mode (text): upload selected text from Android text selection menu
+ * 3. Share mode (shareMode): receive shared content from other apps (Android only)
  */
 
 import React, { useCallback, useEffect } from 'react';
@@ -10,18 +15,35 @@ import { StyleSheet, StatusBar, Platform, BackHandler } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { QuickTileLoadingScreen } from './screens/QuickTileLoadingScreen';
+import { ProcessTextScreen } from './screens/ProcessTextScreen';
+import { DirectShareReceiveScreen } from './screens/DirectShareReceiveScreen';
 import { SyncDirection } from './types/sync';
 import { useSettingsStore } from './stores';
 import { initLogger } from './utils/Logger';
 import { longRunningTaskManager } from './longRunningTask/LongRunningTaskManager';
 
+interface ShareData {
+  type: 'text' | 'file' | 'multiple';
+  text?: string;
+  uri?: string;
+  uris?: string[];
+  mimeType?: string;
+  fileName?: string;
+}
+
 interface QuickActionAppProps {
   direction?: string;
+  text?: string;
+  shareMode?: boolean;
+  shareData?: ShareData;
   systemTheme?: 'light' | 'dark';
 }
 
 export default function QuickActionApp({
-  direction = 'download',
+  direction,
+  text,
+  shareMode,
+  shareData,
   systemTheme,
 }: QuickActionAppProps) {
   const syncDirection = direction === 'upload' ? SyncDirection.Upload : SyncDirection.Download;
@@ -49,6 +71,31 @@ export default function QuickActionApp({
 
   if (!isLoaded) return null;
 
+  // Share mode: receive shared content from other apps (direct data, not via expo-sharing)
+  if (shareMode && shareData) {
+    return (
+      <GestureHandlerRootView style={styles.container}>
+        <ThemeProvider systemColorSchemeOverride={systemTheme}>
+          <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
+          <DirectShareReceiveScreen shareData={shareData} onComplete={handleComplete} overlayMode />
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  // Process text mode: upload selected text
+  if (text) {
+    return (
+      <GestureHandlerRootView style={styles.container}>
+        <ThemeProvider systemColorSchemeOverride={systemTheme}>
+          <StatusBar backgroundColor="transparent" translucent barStyle="light-content" />
+          <ProcessTextScreen text={text} onComplete={handleComplete} overlayMode />
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
+  // Quick tile mode: download/upload
   return (
     <GestureHandlerRootView style={styles.container}>
       <ThemeProvider systemColorSchemeOverride={systemTheme}>

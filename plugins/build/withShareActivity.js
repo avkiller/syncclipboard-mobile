@@ -2,26 +2,26 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const config_plugins_1 = require("expo/config-plugins");
 /**
- * Adds ProcessTextActivity to AndroidManifest.xml so that the app appears
- * in the Android floating text selection toolbar as "SyncClipboard".
+ * Adds ShareActivity to AndroidManifest.xml.
+ * This transparent Activity handles shared content (text, files, images)
+ * without showing the main app UI.
  */
-function addProcessTextActivity(androidManifest) {
+function addShareActivity(androidManifest) {
     const { manifest } = androidManifest;
     if (!Array.isArray(manifest.application)) {
-        console.warn('withProcessTextManifest: No application array in manifest?');
+        console.warn('withShareActivity: No application array in manifest?');
         return androidManifest;
     }
     const application = manifest.application[0];
     if (!application.activity) {
         application.activity = [];
     }
-    const activityName = '.processtext.ProcessTextActivity';
+    const activityName = '.share.ShareActivity';
     const existingIndex = application.activity.findIndex((a) => a.$['android:name'] === activityName);
     const activityEntry = {
         $: {
             'android:name': activityName,
             'android:exported': 'true',
-            'android:label': '@string/process_text_label',
             'android:theme': '@style/Theme.QuickAction.Transparent',
             'android:taskAffinity': '',
             'android:excludeFromRecents': 'true',
@@ -31,9 +31,9 @@ function addProcessTextActivity(androidManifest) {
         },
         'intent-filter': [
             {
-                action: [{ $: { 'android:name': 'android.intent.action.PROCESS_TEXT' } }],
+                action: [{ $: { 'android:name': 'android.intent.action.SEND' } }],
                 category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
-                data: [{ $: { 'android:mimeType': 'text/plain' } }],
+                data: [{ $: { 'android:mimeType': '*/*' } }],
             },
         ],
     };
@@ -45,10 +45,10 @@ function addProcessTextActivity(androidManifest) {
     }
     return androidManifest;
 }
-const withProcessTextManifest = (config) => {
+const withShareActivity = (config) => {
     return (0, config_plugins_1.withAndroidManifest)(config, (config) => {
-        config.modResults = addProcessTextActivity(config.modResults);
+        config.modResults = addShareActivity(config.modResults);
         return config;
     });
 };
-exports.default = (0, config_plugins_1.createRunOncePlugin)(withProcessTextManifest, 'withProcessTextManifest', '1.0.0');
+exports.default = (0, config_plugins_1.createRunOncePlugin)(withShareActivity, 'withShareActivity', '1.0.0');

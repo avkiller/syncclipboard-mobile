@@ -13,9 +13,14 @@ import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
 interface ProcessTextScreenProps {
   text: string;
   onComplete: () => void;
+  overlayMode?: boolean;
 }
 
-export const ProcessTextScreen: React.FC<ProcessTextScreenProps> = ({ text, onComplete }) => {
+export const ProcessTextScreen: React.FC<ProcessTextScreenProps> = ({
+  text,
+  onComplete,
+  overlayMode = false,
+}) => {
   const { t } = useTranslation();
   const activeServer = useSettingsStore((s) => s.getActiveServer());
 
@@ -36,6 +41,7 @@ export const ProcessTextScreen: React.FC<ProcessTextScreenProps> = ({ text, onCo
       failureText={t('processText.uploadFailed')}
       onComplete={onComplete}
       previewText={text.length > 50 ? `${text.slice(0, 50)}…` : text}
+      overlayMode={overlayMode}
     />
   );
 };
