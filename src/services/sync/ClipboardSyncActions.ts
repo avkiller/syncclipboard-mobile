@@ -11,21 +11,7 @@ import { localClipboard } from '../clipboard/LocalClipboard';
 import { DedupedOperation } from '@/utils/DedupedOperation';
 import { File } from 'expo-file-system';
 import i18n from '@/i18n';
-
-/** 刚上传的 hash：用于防止上传后立即被远程回流触发重复处理 */
-let justUploadedHash: string | null = null;
-
-export function setJustUploadedHash(hash: string): void {
-  justUploadedHash = hash;
-}
-
-export function getJustUploadedHash(): string | null {
-  return justUploadedHash;
-}
-
-export function clearJustUploadedHash(): void {
-  justUploadedHash = null;
-}
+import { setJustUploadedHash, setJustSetLocalHash } from './JustSetHash';
 
 /** 比较两个 ClipboardContent 是否代表相同内容（用于去重继承判断） */
 function isSameContent(a: ClipboardContent, b: ClipboardContent): boolean {
@@ -198,6 +184,11 @@ export async function setLocalClipboardFromRemote(
     : content;
   if (finalContent && finalContent.type === 'Text') {
     await localClipboard.setClipboardContent(finalContent, true);
+    // 设置刚设置到本地剪贴板的 hash，防止 ClipboardMonitor 触发自动上传
+    const hash = finalContent.profileHash || finalContent.text;
+    if (hash) {
+      setJustSetLocalHash(hash);
+    }
   }
   return finalContent;
 }

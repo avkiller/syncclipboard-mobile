@@ -9,12 +9,13 @@ import type { AppConfig } from '../../types';
 import { clipboardSyncState } from './SyncState';
 import { configService } from '../ConfigService';
 import { remoteClipboardMonitor } from './RemoteClipboardMonitor';
+import { uploadLocalClipboard, downloadRemoteClipboard } from './ClipboardSyncActions';
 import {
-  uploadLocalClipboard,
-  downloadRemoteClipboard,
   getJustUploadedHash,
   clearJustUploadedHash,
-} from './ClipboardSyncActions';
+  getJustSetLocalHash,
+  clearJustSetLocalHash,
+} from './JustSetHash';
 import { updateForegroundNotification } from '../notification/ForegroundNotification';
 import { historyService } from '../history/HistoryService';
 import { calculateTextHash } from '../../utils/hash';
@@ -201,6 +202,20 @@ class ClipboardChangedHandler {
     if (!activeServer) return;
 
     const currentHash = content.profileHash || content.text;
+
+    // 如果匹配刚设置到本地剪贴板的 hash，跳过自动上传
+    if (currentHash && currentHash === getJustSetLocalHash()) {
+      console.log(
+        '[ClipboardChangedHandler] Ignoring local content just set from remote:',
+        currentHash
+      );
+      // 清除刚设置 hash（只忽略一次）
+      clearJustSetLocalHash();
+      // 更新 lastLocalProfileHash，防止后续重复处理
+      this.lastLocalProfileHash = currentHash;
+      return;
+    }
+    clearJustSetLocalHash();
 
     if (this.lastLocalProfileHash === null) {
       this.lastLocalProfileHash = currentHash;
