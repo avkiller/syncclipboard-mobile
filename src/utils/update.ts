@@ -101,7 +101,8 @@ export interface UpdateCheckResult {
  */
 async function checkForUpdateFromGitHub(
   currentVersionStr: string,
-  includeBeta: boolean
+  includeBeta: boolean,
+  abortSignal?: AbortSignal
 ): Promise<UpdateCheckResult> {
   console.log(
     `[UpdateCheck] GitHub: 开始检查更新, 当前版本=${currentVersionStr}, 包含Beta=${includeBeta}`
@@ -109,6 +110,7 @@ async function checkForUpdateFromGitHub(
 
   const response = await fetch(GITHUB_RELEASES_API, {
     headers: { Accept: 'application/vnd.github+json' },
+    signal: abortSignal,
   });
 
   if (!response.ok) {
@@ -202,13 +204,14 @@ async function checkForUpdateFromGitHub(
  */
 async function checkForUpdateFromGitee(
   currentVersionStr: string,
-  includeBeta: boolean
+  includeBeta: boolean,
+  abortSignal?: AbortSignal
 ): Promise<UpdateCheckResult> {
   console.log(
     `[UpdateCheck] Gitee: 开始检查更新, 当前版本=${currentVersionStr}, 包含Beta=${includeBeta}`
   );
 
-  const response = await fetch(GITEE_RELEASES_API);
+  const response = await fetch(GITEE_RELEASES_API, { signal: abortSignal });
 
   if (!response.ok) {
     console.log(`[UpdateCheck] Gitee: API 请求失败, status=${response.status}`);
@@ -306,14 +309,16 @@ async function checkForUpdateFromGitee(
  * @param currentVersionStr 当前版本字符串
  * @param includeBeta 是否包含 beta 版本，默认 false
  * @param channel 更新通道，默认 'github'
+ * @param abortSignal 可选的 AbortSignal，用于取消请求
  */
 export async function checkForUpdate(
   currentVersionStr: string,
   includeBeta = false,
-  channel: 'github' | 'gitee' = 'github'
+  channel: 'github' | 'gitee' = 'github',
+  abortSignal?: AbortSignal
 ): Promise<UpdateCheckResult> {
   if (channel === 'github') {
-    return checkForUpdateFromGitHub(currentVersionStr, includeBeta);
+    return checkForUpdateFromGitHub(currentVersionStr, includeBeta, abortSignal);
   }
-  return checkForUpdateFromGitee(currentVersionStr, includeBeta);
+  return checkForUpdateFromGitee(currentVersionStr, includeBeta, abortSignal);
 }

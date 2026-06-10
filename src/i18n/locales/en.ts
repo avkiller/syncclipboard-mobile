@@ -329,6 +329,7 @@ const en: DeepString<typeof zh> = {
     checkUpdate: 'Check for updates',
     alreadyLatest: 'Already up to date',
     checkUpdateFailed: 'Failed to check for updates. Please check your network.',
+    updateCheckCancelled: 'Update check cancelled',
     newVersionTitle: 'New version available',
     newVersionMessage:
       'Latest: {{newVersion}}\nCurrent: {{currentVersion}}\n\nRelease notes:\n{{notes}}\n\nSelect download source',

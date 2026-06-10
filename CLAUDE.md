@@ -33,12 +33,12 @@ All code should be written with cross-platform portability in mind (see [Cross-P
 
 `index.ts` registers three separate RN roots, each serving a distinct purpose:
 
-| Registration | Component | Purpose |
-|---|---|---|
-| `main` | `App.tsx` | Full app UI with bottom tab navigation (Home / History / Settings) |
-| `quickAction` | `src/QuickActionApp.tsx` | Transparent overlay for quick-settings tiles, share menu, and text selection actions |
-| `serviceRestart` | `src/ServiceRestartApp.tsx` | Brief "service restored" screen shown when Android restarts the process |
-| Headless | `src/tasks/SmsUploadTask.ts` | Background SMS verification code upload (no UI) |
+| Registration     | Component                    | Purpose                                                                              |
+| ---------------- | ---------------------------- | ------------------------------------------------------------------------------------ |
+| `main`           | `App.tsx`                    | Full app UI with bottom tab navigation (Home / History / Settings)                   |
+| `quickAction`    | `src/QuickActionApp.tsx`     | Transparent overlay for quick-settings tiles, share menu, and text selection actions |
+| `serviceRestart` | `src/ServiceRestartApp.tsx`  | Brief "service restored" screen shown when Android restarts the process              |
+| Headless         | `src/tasks/SmsUploadTask.ts` | Background SMS verification code upload (no UI)                                      |
 
 `App.tsx` handles cold/hot start deep link routing: parses `syncclipboard://` URLs to determine whether to show the main UI or an overlay (share receive, quick upload/download).
 
@@ -61,7 +61,7 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
   - `SyncClipboardClient` — custom server (HTTP + optional SignalR)
   - `WebDAVClient` — WebDAV storage
   - `S3Client` — S3-compatible object storage
-  Clients implement `ISyncClipboardAPI` (in `src/api/clients/APIClient.ts`), which uses `axios` + `AuthService`.
+    Clients implement `ISyncClipboardAPI` (in `src/api/clients/APIClient.ts`), which uses `axios` + `AuthService`.
 - **`BackgroundRuntimeState`** (`src/services/BackgroundRuntimeState.ts`) — non-persisted boolean flag (`isTempDisabled`) for temporarily disabling background tasks. Decoupled from Zustand to avoid circular dependency between `LongRunningTaskManager` and `settingsStore`.
 - **`ClipboardMonitor`** (`src/services/clipboard/ClipboardMonitor.ts`) — polls the system clipboard for changes using `native-timer` (not `setInterval`, to survive background). Detects changes via hash comparison. Accepts background-running checkers.
 - **`RemoteClipboardMonitor`** (`src/services/sync/RemoteClipboardMonitor.ts`) — monitors the remote clipboard. Uses SignalR for SyncClipboard servers, polling for WebDAV/S3. Has deduplication via `DedupedOperation` and content hash tracking.
@@ -78,16 +78,16 @@ Key singletons, typically accessed via `getInstance()` or module-level exports:
 
 **Registered tasks** (in `LongRunningTaskManager.ts`, at module level):
 
-| Task | keepAlive? | Purpose |
-|---|---|---|
-| `foregroundServiceTask` | No | Manages Android foreground service notification |
-| `clipboardSyncTask` | No | Registers callbacks in ClipboardSyncService |
-| `heartbeatTask` | No | Periodic SignalR ping for SyncClipboard servers |
-| `smsForwardingTask` | Yes | SMS forwarding hook |
-| `clipboardMonitorTask` | Yes | Clipboard polling lifecycle |
-| `remoteClipboardMonitorTask` | Yes | Remote monitor lifecycle (SignalR/polling) |
-| `historyTrackerTask` | Yes | Local history change tracking |
-| `historySyncTask` | Yes | History record sync with server |
+| Task                         | keepAlive? | Purpose                                         |
+| ---------------------------- | ---------- | ----------------------------------------------- |
+| `foregroundServiceTask`      | No         | Manages Android foreground service notification |
+| `clipboardSyncTask`          | No         | Registers callbacks in ClipboardSyncService     |
+| `heartbeatTask`              | No         | Periodic SignalR ping for SyncClipboard servers |
+| `smsForwardingTask`          | Yes        | SMS forwarding hook                             |
+| `clipboardMonitorTask`       | Yes        | Clipboard polling lifecycle                     |
+| `remoteClipboardMonitorTask` | Yes        | Remote monitor lifecycle (SignalR/polling)      |
+| `historyTrackerTask`         | Yes        | Local history change tracking                   |
+| `historySyncTask`            | Yes        | History record sync with server                 |
 
 **keepAlive** tasks ignore the "background tasks" master toggle and always run. Non-keepAlive tasks are stopped when the user disables background tasks or when the app is backgrounded with temp-disabled state.
 
@@ -105,16 +105,16 @@ The overlay has a 10-second idle timeout (managed via `native-timer`) to auto-hi
 
 Workspace packages, each is an Expo module with its own `package.json`. Currently all modules have Android native code only; iOS stubs should be added when iOS development begins.
 
-| Module | Platform | Purpose |
-|---|---|---|
-| `signalr-client` | Cross-platform (JS) | Wraps `@microsoft/signalr` JavaScript client, manages connection lifecycle |
-| `native-util` | Android | Native file operations (hash calculation, file copy, APK install). iOS: equivalent file APIs likely already exist in expo-file-system |
-| `native-timer` | Android | Reliable background timers (survives doze mode). iOS: may not be needed (iOS timers behave differently in background) |
-| `clipboard-overlay` | Android-only | Floating overlay window to read clipboard in Android background. iOS: no equivalent needed (iOS clipboard access in background is handled differently) |
-| `shizuku-clipboard` | Android-only | Shizuku API clipboard access. iOS: not applicable |
-| `sms-forwarder` | Android-only | SMS broadcast receiver + verification code extraction. iOS: not applicable (iOS doesn't allow SMS interception) |
-| `foreground-service` | Android-only | Android foreground service notification. iOS: use background modes / BGTaskScheduler equivalent |
-| `shortcut` | Android | Dynamic app shortcuts and quick-settings tiles. iOS: use `expo-quick-actions` for home screen quick actions |
+| Module               | Platform            | Purpose                                                                                                                                                |
+| -------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `signalr-client`     | Cross-platform (JS) | Wraps `@microsoft/signalr` JavaScript client, manages connection lifecycle                                                                             |
+| `native-util`        | Android             | Native file operations (hash calculation, file copy, APK install). iOS: equivalent file APIs likely already exist in expo-file-system                  |
+| `native-timer`       | Android             | Reliable background timers (survives doze mode). iOS: may not be needed (iOS timers behave differently in background)                                  |
+| `clipboard-overlay`  | Android-only        | Floating overlay window to read clipboard in Android background. iOS: no equivalent needed (iOS clipboard access in background is handled differently) |
+| `shizuku-clipboard`  | Android-only        | Shizuku API clipboard access. iOS: not applicable                                                                                                      |
+| `sms-forwarder`      | Android-only        | SMS broadcast receiver + verification code extraction. iOS: not applicable (iOS doesn't allow SMS interception)                                        |
+| `foreground-service` | Android-only        | Android foreground service notification. iOS: use background modes / BGTaskScheduler equivalent                                                        |
+| `shortcut`           | Android             | Dynamic app shortcuts and quick-settings tiles. iOS: use `expo-quick-actions` for home screen quick actions                                            |
 
 ### Expo Config Plugins (`plugins/`)
 
@@ -146,17 +146,22 @@ Bottom tab navigator (Home / History / Settings) in `src/navigation/AppNavigator
 ### In TypeScript/JavaScript
 
 - **Use `Platform.OS` for branching, never `Platform.select` with an "android-only" fallback that would crash on iOS.** Prefer this pattern:
+
   ```typescript
   // ✅ Good — iOS gets a clean no-op or early return, Android logic is self-contained
   if (Platform.OS !== 'android') return;
   // Android-specific code here
 
   // ✅ Good — explicit default
-  const value = Platform.select({ android: () => doAndroidThing(), default: () => fallbackForOtherPlatforms() })();
+  const value = Platform.select({
+    android: () => doAndroidThing(),
+    default: () => fallbackForOtherPlatforms(),
+  })();
 
   // ❌ Avoid — iOS falls into `default` which may error
   const result = Platform.select({ android: androidSpecificValue });
   ```
+
 - **Never use `import { ... } from 'react-native'` APIs that are Android-only without a platform guard.** (e.g., `ToastAndroid`, `BackHandler.exitApp()`).
 - **Dependency injection / strategy pattern** — when a feature fundamentally requires different implementations per platform (e.g., clipboard access), define a common interface in shared code and inject the platform-specific implementation. The `clipboardProxy.ts` fallback chain is a good example: it already has Shizuku → Overlay → expo-clipboard, and iOS can slot into this chain naturally.
 - **Keep iOS as a silent no-op target** — new features that cannot work on iOS today should still compile and run without crashing. The app should at minimum display the UI on iOS, even if certain features show "not available on iOS" states.

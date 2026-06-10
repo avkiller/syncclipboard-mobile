@@ -318,6 +318,7 @@ const zh = {
     checkUpdate: '检查更新',
     alreadyLatest: '当前已是最新版本',
     checkUpdateFailed: '检查更新失败，请检查网络连接',
+    updateCheckCancelled: '已取消检查更新',
     newVersionTitle: '发现新版本',
     newVersionMessage:
       '最新版本：{{newVersion}}\n当前版本：{{currentVersion}}\n\n更新说明：\n{{notes}}\n\n请选择下载渠道',

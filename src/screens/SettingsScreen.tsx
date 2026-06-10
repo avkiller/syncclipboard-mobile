@@ -10,7 +10,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Switch,
   TextInput,
   Alert,
   Linking,
@@ -26,6 +25,14 @@ import { useTheme } from '@/hooks/useTheme';
 import type { ThemeMode } from '@/theme';
 import { useSettingsStore } from '@/stores';
 import { ServerConfigModal, ServerListItem, MessageToast } from '@/components';
+import {
+  SettingsSection,
+  SettingItem,
+  SettingSwitch,
+  SettingInput,
+  SettingDropdown,
+  SettingAction,
+} from '@/components/settings';
 import { ServerConfig } from '@/types/api';
 import { useMessageToast } from '@/hooks/useMessageToast';
 import {
@@ -46,7 +53,7 @@ import {
   type ApkSource,
   formatFileSize,
 } from '@/utils';
-import { Plus, RefreshCw, Check, ChevronDown, ChevronUp } from 'react-native-feather';
+import { Plus, RefreshCw, ChevronDown, ChevronUp } from 'react-native-feather';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { hasOverlayPermission, requestOverlayPermission } from 'clipboard-overlay';
 import {
@@ -145,15 +152,10 @@ export const SettingsScreen = () => {
   );
   const [showSmsTestModal, setShowSmsTestModal] = useState(false);
   const [smsTestInput, setSmsTestInput] = useState('');
-  const [showLogLevelMenu, setShowLogLevelMenu] = useState(false);
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
-  const [showLanguageMenu, setShowLanguageMenu] = useState(false);
-  const [showUpdateChannelMenu, setShowUpdateChannelMenu] = useState(false);
   const [localHideFromRecents, setLocalHideFromRecents] = useState(
     config?.hideFromRecents ?? false
   );
   const [showStatsModal, setShowStatsModal] = useState(false);
-  const [showImageAutoDownloadMenu, setShowImageAutoDownloadMenu] = useState(false);
   const [localImageAutoDownload, setLocalImageAutoDownload] = useState<'wifi' | 'always' | 'off'>(
     config?.historyImageAutoDownload ?? 'wifi'
   );
@@ -167,6 +169,7 @@ export const SettingsScreen = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const downloadAbortRef = useRef<AbortController | null>(null);
+  const updateCheckAbortRef = useRef<AbortController | null>(null);
   const latestAssetsRef = useRef<ReleaseAssetInfo[]>([]);
   const latestTagRef = useRef<string>('');
   const releaseNotesRef = useRef<string | undefined>(undefined);
@@ -950,6 +953,22 @@ export const SettingsScreen = () => {
   };
 
   const handleToggleUpdateChannel = async (channel: 'github' | 'gitee') => {
+    // 静默取消正在进行的检查更新
+    if (updateCheckAbortRef.current) {
+      updateCheckAbortRef.current.abort();
+      updateCheckAbortRef.current = null;
+    }
+    // 静默取消正在进行的下载
+    if (downloadAbortRef.current) {
+      downloadAbortRef.current.abort();
+      downloadAbortRef.current = null;
+    }
+    // 重置状态
+    setIsCheckingUpdate(false);
+    setIsDownloading(false);
+    setUpdateAvailable(false);
+    setLatestVersion(null);
+
     setLocalUpdateChannel(channel);
     try {
       await setUpdateChannel(channel);
@@ -1028,13 +1047,24 @@ export const SettingsScreen = () => {
 
   // 执行更新检查逻辑
   const runUpdateCheck = async (showNoUpdateToast: boolean, includeBeta?: boolean) => {
+    // 取消之前的检查
+    if (updateCheckAbortRef.current) {
+      updateCheckAbortRef.current.abort();
+    }
+    updateCheckAbortRef.current = new AbortController();
+
     setIsCheckingUpdate(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
       await setLastUpdateCheckDate(today);
       const useBeta = includeBeta ?? config?.updateToBeta ?? false;
       const channel = config?.updateChannel ?? 'github';
-      const result = await checkForUpdate(appVersion, useBeta, channel);
+      const result = await checkForUpdate(
+        appVersion,
+        useBeta,
+        channel,
+        updateCheckAbortRef.current.signal
+      );
       if (result.hasUpdate) {
         setUpdateAvailable(true);
         setLatestVersion(result.latestVersion);
@@ -1050,12 +1080,27 @@ export const SettingsScreen = () => {
         }
       }
       cleanOldApkCache(appVersion);
-    } catch {
+    } catch (e) {
+      // 如果是用户取消，不显示错误
+      if (e instanceof Error && e.name === 'AbortError') {
+        return;
+      }
       if (showNoUpdateToast) {
         showMessage(t('settings.checkUpdateFailed'), 'error');
       }
     } finally {
       setIsCheckingUpdate(false);
+      updateCheckAbortRef.current = null;
+    }
+  };
+
+  // 取消更新检查
+  const handleCancelUpdateCheck = () => {
+    if (updateCheckAbortRef.current) {
+      updateCheckAbortRef.current.abort();
+      setIsCheckingUpdate(false);
+      updateCheckAbortRef.current = null;
+      showMessage(t('settings.updateCheckCancelled'), 'info');
     }
   };
 
@@ -1397,544 +1442,169 @@ export const SettingsScreen = () => {
         </View>
 
         {/* 同步设置部分 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('settings.syncSection')}
-            </Text>
-          </View>
+        <SettingsSection title={t('settings.syncSection')}>
+          <SettingSwitch
+            label={t('settings.autoSync')}
+            description={t('settings.autoSyncDesc')}
+            value={localAutoSyncEnabled}
+            onChange={handleToggleAutoSync}
+          />
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-            ]}
-          >
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.autoSync')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {t('settings.autoSyncDesc')}
-                </Text>
-              </View>
-              <Switch
-                value={localAutoSyncEnabled}
-                onValueChange={handleToggleAutoSync}
-                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                thumbColor={localAutoSyncEnabled ? theme.colors.surface : theme.colors.textTertiary}
-              />
-            </View>
+          <SettingSwitch
+            label={t('settings.syncToast')}
+            description={t('settings.syncToastDesc')}
+            value={localSyncToastEnabled}
+            onChange={handleToggleSyncToast}
+          />
 
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.syncToast')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {t('settings.syncToastDesc')}
-                </Text>
-              </View>
-              <Switch
-                value={localSyncToastEnabled}
-                onValueChange={handleToggleSyncToast}
-                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                thumbColor={
-                  localSyncToastEnabled ? theme.colors.surface : theme.colors.textTertiary
-                }
-              />
-            </View>
+          <SettingInput
+            label={t('settings.autoDownloadMaxSize')}
+            description={t('settings.autoDownloadMaxSizeDesc')}
+            value={maxSizeInput}
+            onChangeText={setMaxSizeInput}
+            onBlur={handleMaxSizeBlur}
+            unit="MB"
+            keyboardType="number-pad"
+            placeholder="5"
+          />
 
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.autoDownloadMaxSize')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {t('settings.autoDownloadMaxSizeDesc')}
-                </Text>
-              </View>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={[
-                    styles.sizeInput,
-                    {
-                      color: theme.colors.text,
-                      borderColor: theme.colors.divider,
-                      backgroundColor: theme.colors.background,
-                    },
-                  ]}
-                  value={maxSizeInput}
-                  onChangeText={setMaxSizeInput}
-                  onBlur={handleMaxSizeBlur}
-                  keyboardType="number-pad"
-                  placeholder="5"
-                  placeholderTextColor={theme.colors.textTertiary}
-                />
-                <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>MB</Text>
-              </View>
-            </View>
+          {activeServer?.type !== 'syncclipboard' && (
+            <SettingInput
+              label={t('settings.remotePollingInterval')}
+              value={remotePollingInput}
+              onChangeText={setRemotePollingInput}
+              onBlur={handleRemotePollingBlur}
+              unit={t('settings.unitSecond')}
+              keyboardType="number-pad"
+              placeholder="3"
+              filter={filterPositiveInteger}
+            />
+          )}
 
-            {activeServer?.type !== 'syncclipboard' && (
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.remotePollingInterval')}
-                  </Text>
-                </View>
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    style={[
-                      styles.sizeInput,
-                      {
-                        color: theme.colors.text,
-                        borderColor: theme.colors.divider,
-                        backgroundColor: theme.colors.background,
-                      },
-                    ]}
-                    value={remotePollingInput}
-                    onChangeText={(text) => setRemotePollingInput(filterPositiveInteger(text))}
-                    onBlur={handleRemotePollingBlur}
-                    keyboardType="number-pad"
-                    placeholder="3"
-                    placeholderTextColor={theme.colors.textTertiary}
-                  />
-                  <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>
-                    {t('settings.unitSecond')}
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <View style={styles.settingRowNoBorder}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.localPollingInterval')}
-                </Text>
-              </View>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={[
-                    styles.sizeInput,
-                    {
-                      color: theme.colors.text,
-                      borderColor: theme.colors.divider,
-                      backgroundColor: theme.colors.background,
-                    },
-                  ]}
-                  value={localPollingInput}
-                  onChangeText={(text) => setLocalPollingInput(filterPositiveInteger(text))}
-                  onBlur={handleLocalPollingBlur}
-                  keyboardType="number-pad"
-                  placeholder="1"
-                  placeholderTextColor={theme.colors.textTertiary}
-                />
-                <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>
-                  {t('settings.unitSecond')}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
+          <SettingInput
+            label={t('settings.localPollingInterval')}
+            value={localPollingInput}
+            onChangeText={setLocalPollingInput}
+            onBlur={handleLocalPollingBlur}
+            unit={t('settings.unitSecond')}
+            keyboardType="number-pad"
+            placeholder="1"
+            filter={filterPositiveInteger}
+          />
+        </SettingsSection>
 
         {/* 历史记录部分 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('settings.historySection')}
-            </Text>
-          </View>
+        <SettingsSection title={t('settings.historySection')}>
+          <SettingSwitch
+            label={t('settings.historySync')}
+            description={
+              activeServer?.type !== 'syncclipboard'
+                ? t('settings.historySyncNotSupported')
+                : t('settings.historySyncDesc')
+            }
+            value={localHistorySyncEnabled && activeServer?.type === 'syncclipboard'}
+            onChange={handleToggleHistorySync}
+            disabled={activeServer?.type !== 'syncclipboard'}
+          />
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-            ]}
-          >
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.historySync')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {activeServer?.type !== 'syncclipboard'
-                    ? t('settings.historySyncNotSupported')
-                    : t('settings.historySyncDesc')}
-                </Text>
-              </View>
-              <Switch
-                value={localHistorySyncEnabled && activeServer?.type === 'syncclipboard'}
-                onValueChange={handleToggleHistorySync}
-                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                thumbColor={
-                  localHistorySyncEnabled && activeServer?.type === 'syncclipboard'
-                    ? theme.colors.surface
-                    : theme.colors.textTertiary
-                }
-                disabled={activeServer?.type !== 'syncclipboard'}
-              />
-            </View>
+          <SettingInput
+            label={t('settings.maxHistoryItems')}
+            description={t('settings.maxHistoryItemsDesc')}
+            value={maxHistoryItemsInput}
+            onChangeText={setMaxHistoryItemsInput}
+            onBlur={handleMaxHistoryItemsBlur}
+            unit={t('settings.unitItem')}
+            keyboardType="number-pad"
+            placeholder="100"
+          />
 
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.maxHistoryItems')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {t('settings.maxHistoryItemsDesc')}
-                </Text>
-              </View>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={[
-                    styles.sizeInput,
-                    {
-                      color: theme.colors.text,
-                      borderColor: theme.colors.divider,
-                      backgroundColor: theme.colors.background,
-                    },
-                  ]}
-                  value={maxHistoryItemsInput}
-                  onChangeText={setMaxHistoryItemsInput}
-                  onBlur={handleMaxHistoryItemsBlur}
-                  keyboardType="number-pad"
-                  placeholder="100"
-                  placeholderTextColor={theme.colors.textTertiary}
-                />
-                <Text style={[styles.unitLabel, { color: theme.colors.textSecondary }]}>
-                  {t('settings.unitItem')}
-                </Text>
-              </View>
-            </View>
+          <SettingDropdown
+            label={t('settings.imageAutoDownload')}
+            options={imageAutoDownloadOptions}
+            value={localImageAutoDownload}
+            onChange={handleImageAutoDownloadChange}
+          />
 
-            <TouchableOpacity
-              style={styles.settingRowNoBorder}
-              onPress={() => setShowImageAutoDownloadMenu(!showImageAutoDownloadMenu)}
-            >
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                {t('settings.imageAutoDownload')}
-              </Text>
-              <View style={styles.dropdownValue}>
-                <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
-                  {imageAutoDownloadOptions.find((o) => o.value === localImageAutoDownload)
-                    ?.label ?? t('settings.imageAutoDownloadWifi')}
-                </Text>
-                {showImageAutoDownloadMenu ? (
-                  <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
-                ) : (
-                  <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
-                )}
-              </View>
-            </TouchableOpacity>
-
-            {showImageAutoDownloadMenu && (
-              <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
-                {imageAutoDownloadOptions.map((option, index) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.dropdownItem,
-                      index < imageAutoDownloadOptions.length - 1
-                        ? {
-                            borderBottomWidth: StyleSheet.hairlineWidth,
-                            borderBottomColor: theme.colors.divider,
-                          }
-                        : undefined,
-                    ]}
-                    onPress={() => {
-                      handleImageAutoDownloadChange(option.value);
-                      setShowImageAutoDownloadMenu(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        {
-                          color:
-                            localImageAutoDownload === option.value
-                              ? theme.colors.primary
-                              : theme.colors.text,
-                        },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                    {localImageAutoDownload === option.value && (
-                      <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <View
-              style={[
-                styles.settingRowNoBorder,
-                { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.colors.divider },
-              ]}
-            >
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.showImageCopyButton')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {t('settings.showImageCopyButtonDesc')}
-                </Text>
-              </View>
-              <Switch
-                value={config?.showImageCopyButton ?? false}
-                onValueChange={(enabled) => updateConfig({ showImageCopyButton: enabled })}
-                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                thumbColor={
-                  (config?.showImageCopyButton ?? false)
-                    ? theme.colors.surface
-                    : theme.colors.textTertiary
-                }
-              />
-            </View>
-          </View>
-        </View>
+          <SettingSwitch
+            label={t('settings.showImageCopyButton')}
+            description={t('settings.showImageCopyButtonDesc')}
+            value={config?.showImageCopyButton ?? false}
+            onChange={(enabled) => updateConfig({ showImageCopyButton: enabled })}
+          />
+        </SettingsSection>
 
         {/* 后台任务部分 */}
         {Platform.OS === 'android' && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderBase}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {t('settings.backgroundTasksSection')}
-              </Text>
-            </View>
+          <SettingsSection title={t('settings.backgroundTasksSection')}>
+            <SettingSwitch
+              label={t('settings.backgroundTasksSection')}
+              description={
+                isTempDisabledBackgroundTasks
+                  ? t('settings.backgroundTasksTempStopped')
+                  : t('settings.backgroundTasksDesc')
+              }
+              value={localBackgroundTasksEnabled}
+              onChange={handleToggleBackgroundTasks}
+            />
 
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-              ]}
-            >
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.backgroundTasksSection')}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    {isTempDisabledBackgroundTasks
-                      ? t('settings.backgroundTasksTempStopped')
-                      : t('settings.backgroundTasksDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localBackgroundTasksEnabled}
-                  onValueChange={handleToggleBackgroundTasks}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localBackgroundTasksEnabled ? theme.colors.surface : theme.colors.textTertiary
-                  }
-                />
-              </View>
+            <SettingSwitch
+              label={t('settings.foregroundNotification')}
+              description={t('settings.foregroundNotificationDesc')}
+              value={localBackgroundTasksEnabled && localForegroundNotification}
+              onChange={handleToggleForegroundNotification}
+              disabled={!localBackgroundTasksEnabled}
+            />
 
-              {/* 后台同步 */}
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text
-                    style={[
-                      styles.settingLabel,
-                      {
-                        color: localBackgroundTasksEnabled
-                          ? theme.colors.text
-                          : theme.colors.textTertiary,
-                      },
-                    ]}
-                  >
-                    {t('settings.foregroundNotification')}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.settingDescription,
-                      {
-                        color: localBackgroundTasksEnabled
-                          ? theme.colors.textSecondary
-                          : theme.colors.textTertiary,
-                      },
-                    ]}
-                  >
-                    {t('settings.foregroundNotificationDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localBackgroundTasksEnabled && localForegroundNotification}
-                  onValueChange={handleToggleForegroundNotification}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localBackgroundTasksEnabled && localForegroundNotification
-                      ? theme.colors.surface
-                      : theme.colors.textTertiary
-                  }
-                  disabled={!localBackgroundTasksEnabled}
-                />
-              </View>
+            <SettingSwitch
+              label={t('settings.backgroundDownload')}
+              value={localBackgroundTasksEnabled && localBackgroundDownloadEnabled}
+              onChange={handleToggleBackgroundDownload}
+              disabled={!localBackgroundTasksEnabled}
+            />
 
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text
-                    style={[
-                      styles.settingLabel,
-                      {
-                        color: localBackgroundTasksEnabled
-                          ? theme.colors.text
-                          : theme.colors.textTertiary,
-                      },
-                    ]}
-                  >
-                    {t('settings.backgroundDownload')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localBackgroundTasksEnabled && localBackgroundDownloadEnabled}
-                  onValueChange={handleToggleBackgroundDownload}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localBackgroundTasksEnabled && localBackgroundDownloadEnabled
-                      ? theme.colors.surface
-                      : theme.colors.textTertiary
-                  }
-                  disabled={!localBackgroundTasksEnabled}
-                />
-              </View>
+            <SettingSwitch
+              label={t('settings.backgroundUpload')}
+              value={localBackgroundTasksEnabled && localBackgroundUploadEnabled}
+              onChange={handleToggleBackgroundUpload}
+              disabled={!localBackgroundTasksEnabled}
+            />
 
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text
-                    style={[
-                      styles.settingLabel,
-                      {
-                        color: localBackgroundTasksEnabled
-                          ? theme.colors.text
-                          : theme.colors.textTertiary,
-                      },
-                    ]}
-                  >
-                    {t('settings.backgroundUpload')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localBackgroundTasksEnabled && localBackgroundUploadEnabled}
-                  onValueChange={handleToggleBackgroundUpload}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localBackgroundTasksEnabled && localBackgroundUploadEnabled
-                      ? theme.colors.surface
-                      : theme.colors.textTertiary
-                  }
-                  disabled={!localBackgroundTasksEnabled}
-                />
-              </View>
+            <SettingSwitch
+              label={t('settings.clipboardOverlay')}
+              value={localBackgroundTasksEnabled && localClipboardOverlayEnabled}
+              onChange={handleToggleClipboardOverlay}
+              disabled={!localBackgroundTasksEnabled}
+            />
 
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text
-                    style={[
-                      styles.settingLabel,
-                      {
-                        color: localBackgroundTasksEnabled
-                          ? theme.colors.text
-                          : theme.colors.textTertiary,
-                      },
-                    ]}
-                  >
-                    {t('settings.clipboardOverlay')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localBackgroundTasksEnabled && localClipboardOverlayEnabled}
-                  onValueChange={handleToggleClipboardOverlay}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localBackgroundTasksEnabled && localClipboardOverlayEnabled
-                      ? theme.colors.surface
-                      : theme.colors.textTertiary
-                  }
-                  disabled={!localBackgroundTasksEnabled}
-                />
-              </View>
-
-              <View style={styles.settingRowNoBorder}>
-                <View style={styles.settingInfo}>
-                  <Text
-                    style={[
-                      styles.settingLabel,
-                      {
-                        color: localBackgroundTasksEnabled
-                          ? theme.colors.text
-                          : theme.colors.textTertiary,
-                      },
-                    ]}
-                  >
-                    {t('settings.shizukuClipboard')}
-                  </Text>
-                  <Text
-                    style={[styles.settingDescription, { color: theme.colors.primary }]}
-                    onPress={() => Linking.openURL('https://shizuku.rikka.app/')}
-                  >
-                    {t('settings.shizukuWebsite')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localBackgroundTasksEnabled && localShizukuClipboardEnabled}
-                  onValueChange={handleToggleShizukuClipboard}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localBackgroundTasksEnabled && localShizukuClipboardEnabled
-                      ? theme.colors.surface
-                      : theme.colors.textTertiary
-                  }
-                  disabled={!localBackgroundTasksEnabled}
-                />
-              </View>
-            </View>
-          </View>
+            <SettingSwitch
+              label={t('settings.shizukuClipboard')}
+              descriptionLink={{
+                text: t('settings.shizukuWebsite'),
+                onPress: () => Linking.openURL('https://shizuku.rikka.app/'),
+              }}
+              value={localBackgroundTasksEnabled && localShizukuClipboardEnabled}
+              onChange={handleToggleShizukuClipboard}
+              disabled={!localBackgroundTasksEnabled}
+            />
+          </SettingsSection>
         )}
 
         {/* 短信自动化部分 */}
         {Platform.OS === 'android' && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderBase}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {t('settings.smsSection')}
-              </Text>
-            </View>
-
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-              ]}
-            >
-              <View style={styles.settingRowNoBorder}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.smsForwarding')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localSmsForwardingEnabled}
-                  onValueChange={handleToggleSmsForwarding}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localSmsForwardingEnabled ? theme.colors.surface : theme.colors.textTertiary
-                  }
-                />
-              </View>
-            </View>
-          </View>
+          <SettingsSection title={t('settings.smsSection')}>
+            <SettingSwitch
+              label={t('settings.smsForwarding')}
+              value={localSmsForwardingEnabled}
+              onChange={handleToggleSmsForwarding}
+            />
+          </SettingsSection>
         )}
 
         {/* 权限管理部分 */}
         {Platform.OS === 'android' && (
-          <View style={styles.section}>
-            <View style={[styles.sectionHeaderBase, styles.sectionHeaderRow]}>
-              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                {t('settings.permissionsSection')}
-              </Text>
+          <SettingsSection
+            title={t('settings.permissionsSection')}
+            headerRight={
               <TouchableOpacity
                 style={styles.iconButton}
                 onPress={refreshPermissions}
@@ -1942,194 +1612,104 @@ export const SettingsScreen = () => {
               >
                 <RefreshCw color={theme.colors.primary} width={16} height={16} />
               </TouchableOpacity>
-            </View>
+            }
+          >
+            <SettingSwitch
+              label={t('settings.permissionNotification')}
+              value={permNotification}
+              onChange={() => Linking.openSettings()}
+            />
 
-            <View
-              style={[
-                styles.card,
-                { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-              ]}
-            >
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.permissionNotification')}
-                  </Text>
-                </View>
-                <Switch
-                  value={permNotification}
-                  onValueChange={() => Linking.openSettings()}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={permNotification ? theme.colors.surface : theme.colors.textTertiary}
-                />
-              </View>
+            <SettingSwitch
+              label={t('settings.permissionOverlay')}
+              description={t('settings.permissionOverlayDesc')}
+              value={permOverlay}
+              onChange={() => requestOverlayPermission()}
+            />
 
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.permissionOverlay')}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    {t('settings.permissionOverlayDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={permOverlay}
-                  onValueChange={() => requestOverlayPermission()}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={permOverlay ? theme.colors.surface : theme.colors.textTertiary}
-                />
-              </View>
+            <SettingSwitch
+              label={t('settings.permissionSms')}
+              description={t('settings.permissionSmsDesc')}
+              value={permSms}
+              onChange={() => Linking.openSettings()}
+            />
 
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.permissionSms')}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    {t('settings.permissionSmsDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={permSms}
-                  onValueChange={() => Linking.openSettings()}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={permSms ? theme.colors.surface : theme.colors.textTertiary}
-                />
-              </View>
+            <SettingSwitch
+              label={t('settings.permissionShizuku')}
+              description={
+                shizukuAvailable
+                  ? t('settings.permissionShizukuDesc')
+                  : t('settings.shizukuNotRunningDesc')
+              }
+              value={permShizuku}
+              onChange={async () => {
+                if (!shizukuAvailable) {
+                  Alert.alert(
+                    t('settings.shizukuNotRunningTitle'),
+                    t('settings.shizukuNotRunningMessage'),
+                    [
+                      {
+                        text: t('common.learnMore'),
+                        onPress: () => Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
+                      },
+                      { text: t('common.cancel'), style: 'cancel' },
+                    ]
+                  );
+                  return;
+                }
+                if (!permShizuku) {
+                  requestShizukuPermission();
+                  setTimeout(refreshPermissions, 2000);
+                }
+              }}
+            />
 
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.permissionShizuku')}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    {shizukuAvailable
-                      ? t('settings.permissionShizukuDesc')
-                      : t('settings.shizukuNotRunningDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={permShizuku}
-                  onValueChange={async () => {
-                    if (!shizukuAvailable) {
-                      Alert.alert(
-                        t('settings.shizukuNotRunningTitle'),
-                        t('settings.shizukuNotRunningMessage'),
-                        [
-                          {
-                            text: t('common.learnMore'),
-                            onPress: () =>
-                              Linking.openURL('https://shizuku.rikka.app/guide/setup/'),
-                          },
-                          { text: t('common.cancel'), style: 'cancel' },
-                        ]
-                      );
-                      return;
-                    }
-                    if (!permShizuku) {
-                      requestShizukuPermission();
-                      // 延迟刷新权限状态（等待用户授权）
-                      setTimeout(refreshPermissions, 2000);
-                    }
-                  }}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={permShizuku ? theme.colors.surface : theme.colors.textTertiary}
-                />
-              </View>
-
-              <View style={styles.settingRowNoBorder}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.permissionBattery')}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    {t('settings.permissionBatteryDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={permBattery}
-                  onValueChange={async () => {
-                    const { requestIgnoreBatteryOptimizations } = await import('native-util');
-                    if (hasBatteryOptRequested.current) {
-                      Alert.alert(
-                        t('settings.batteryOptDialogTitle'),
-                        t('settings.batteryOptDialogMessage'),
-                        [
-                          {
-                            text: t('common.goToSettings'),
-                            onPress: () => Linking.openSettings(),
-                          },
-                          { text: t('common.cancel'), style: 'cancel' },
-                        ]
-                      );
-                      return;
-                    }
-                    requestIgnoreBatteryOptimizations();
-                    hasBatteryOptRequested.current = true;
-                  }}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={permBattery ? theme.colors.surface : theme.colors.textTertiary}
-                />
-              </View>
-            </View>
-          </View>
+            <SettingSwitch
+              label={t('settings.permissionBattery')}
+              description={t('settings.permissionBatteryDesc')}
+              value={permBattery}
+              onChange={async () => {
+                const { requestIgnoreBatteryOptimizations } = await import('native-util');
+                if (hasBatteryOptRequested.current) {
+                  Alert.alert(
+                    t('settings.batteryOptDialogTitle'),
+                    t('settings.batteryOptDialogMessage'),
+                    [
+                      {
+                        text: t('common.goToSettings'),
+                        onPress: () => Linking.openSettings(),
+                      },
+                      { text: t('common.cancel'), style: 'cancel' },
+                    ]
+                  );
+                  return;
+                }
+                requestIgnoreBatteryOptimizations();
+                hasBatteryOptRequested.current = true;
+              }}
+            />
+          </SettingsSection>
         )}
 
         {/* 快捷操作部分 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('settings.shortcutsSection')}
-            </Text>
-          </View>
+        <SettingsSection title={t('settings.shortcutsSection')}>
+          <SettingAction
+            label={t('settings.addDownloadShortcut')}
+            buttonText={t('common.add')}
+            onPress={handleAddDownloadShortcut}
+          />
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-            ]}
-          >
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.addDownloadShortcut')}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-                onPress={handleAddDownloadShortcut}
-              >
-                <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
-                  {t('common.add')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.settingRowNoBorder}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.addUploadShortcut')}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-                onPress={handleAddUploadShortcut}
-              >
-                <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
-                  {t('common.add')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          <SettingAction
+            label={t('settings.addUploadShortcut')}
+            buttonText={t('common.add')}
+            onPress={handleAddUploadShortcut}
+          />
+        </SettingsSection>
 
         {/* 存储部分 */}
-        <View style={styles.section}>
-          <View style={[styles.sectionHeaderBase, styles.sectionHeaderRow]}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('settings.storageSection')}
-            </Text>
+        <SettingsSection
+          title={t('settings.storageSection')}
+          headerRight={
             <TouchableOpacity
               style={styles.iconButton}
               onPress={calculateStorageSizes}
@@ -2137,677 +1717,194 @@ export const SettingsScreen = () => {
             >
               <RefreshCw color={theme.colors.primary} width={16} height={16} />
             </TouchableOpacity>
-          </View>
+          }
+        >
+          <SettingAction
+            label={t('settings.cacheSize')}
+            description={isCalculating ? t('common.loading') : formatFileSize(cacheSize)}
+            buttonText={t('common.clearAction')}
+            onPress={handleClearCache}
+            loading={isCalculating}
+          />
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-            ]}
-          >
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.cacheSize')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {isCalculating ? t('common.loading') : formatFileSize(cacheSize)}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.clearButton, { backgroundColor: theme.colors.primary }]}
-                onPress={handleClearCache}
-                disabled={isCalculating}
-              >
-                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>
-                  {t('common.clearAction')}
-                </Text>
-              </TouchableOpacity>
-            </View>
+          <SettingAction
+            label={t('settings.logSize')}
+            description={isCalculating ? t('common.loading') : formatFileSize(logSize)}
+            buttonText={t('common.clearAction')}
+            onPress={handleClearLogs}
+            loading={isCalculating}
+          />
 
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.logSize')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {isCalculating ? t('common.loading') : formatFileSize(logSize)}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.clearButton, { backgroundColor: theme.colors.primary }]}
-                onPress={handleClearLogs}
-                disabled={isCalculating}
-              >
-                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>
-                  {t('common.clearAction')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.settingRowNoBorder}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.historySize')}
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {isCalculating ? t('common.loading') : formatFileSize(historySize)}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
+          <SettingItem
+            label={t('settings.historySize')}
+            description={isCalculating ? t('common.loading') : formatFileSize(historySize)}
+          />
+        </SettingsSection>
 
         {/* 日志设置部分 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('settings.logsSection')}
-            </Text>
-          </View>
-
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
+        <SettingsSection title={t('settings.logsSection')}>
+          <SettingDropdown
+            label={t('settings.logLevel')}
+            options={[
+              { label: t('settings.logLevelDebug'), value: 'debug' as LogLevel },
+              { label: t('settings.logLevelInfo'), value: 'info' as LogLevel },
+              { label: t('settings.logLevelWarn'), value: 'warn' as LogLevel },
+              { label: t('settings.logLevelError'), value: 'error' as LogLevel },
             ]}
-          >
-            <TouchableOpacity
-              style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
-              onPress={() => setShowLogLevelMenu(!showLogLevelMenu)}
-            >
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                {t('settings.logLevel')}
-              </Text>
-              <View style={styles.dropdownValue}>
-                <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
-                  {config?.logLevel === 'debug'
-                    ? t('settings.logLevelDebug')
-                    : config?.logLevel === 'info'
-                      ? t('settings.logLevelInfo')
-                      : config?.logLevel === 'warn'
-                        ? t('settings.logLevelWarn')
-                        : t('settings.logLevelError')}
-                </Text>
-                {showLogLevelMenu ? (
-                  <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
-                ) : (
-                  <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
-                )}
-              </View>
-            </TouchableOpacity>
+            value={config?.logLevel ?? 'info'}
+            onChange={handleSetLogLevel}
+          />
 
-            {showLogLevelMenu && (
-              <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
-                {[
-                  { label: t('settings.logLevelDebug'), value: 'debug' as LogLevel },
-                  { label: t('settings.logLevelInfo'), value: 'info' as LogLevel },
-                  { label: t('settings.logLevelWarn'), value: 'warn' as LogLevel },
-                  { label: t('settings.logLevelError'), value: 'error' as LogLevel },
-                ].map((option, index) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.dropdownItem,
-                      index < 3
-                        ? {
-                            borderBottomWidth: StyleSheet.hairlineWidth,
-                            borderBottomColor: theme.colors.divider,
-                          }
-                        : undefined,
-                    ]}
-                    onPress={() => {
-                      handleSetLogLevel(option.value);
-                      setShowLogLevelMenu(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        {
-                          color:
-                            config?.logLevel === option.value
-                              ? theme.colors.primary
-                              : theme.colors.text,
-                        },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                    {config?.logLevel === option.value && (
-                      <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <View style={styles.settingRowNoBorder}>
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                {t('settings.exportLogs')}
-              </Text>
-              <TouchableOpacity
-                style={[styles.clearButton, { backgroundColor: theme.colors.primary }]}
-                onPress={handleExportLogs}
-                disabled={isCalculating}
-              >
-                <Text style={[styles.clearButtonText, { color: theme.colors.white }]}>
-                  {isExportingLogs ? t('common.cancel') : t('common.export')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          <SettingAction
+            label={t('settings.exportLogs')}
+            buttonText={isExportingLogs ? t('common.cancel') : t('common.export')}
+            onPress={handleExportLogs}
+            loading={isCalculating}
+          />
+        </SettingsSection>
 
         {/* 外观设置部分 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('settings.appearanceSection')}
-            </Text>
-          </View>
+        <SettingsSection title={t('settings.appearanceSection')}>
+          <SettingDropdown
+            label={t('settings.language')}
+            options={languageOptions}
+            value={currentLanguage}
+            onChange={(value) => setLanguage(value)}
+          />
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-            ]}
-          >
-            {/* 语言设置 */}
-            <TouchableOpacity
-              style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
-              onPress={() => setShowLanguageMenu(!showLanguageMenu)}
-            >
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                {t('settings.language')}
-              </Text>
-              <View style={styles.dropdownValue}>
-                <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
-                  {languageOptions.find((o) => o.value === currentLanguage)?.label ??
-                    t('settings.languageAuto')}
-                </Text>
-                {showLanguageMenu ? (
-                  <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
-                ) : (
-                  <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
-                )}
-              </View>
-            </TouchableOpacity>
+          <SettingDropdown
+            label={t('settings.theme')}
+            options={themeOptions}
+            value={themeMode}
+            onChange={(value) => setThemeMode(value)}
+          />
 
-            {showLanguageMenu && (
-              <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
-                {languageOptions.map((option, index) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.dropdownItem,
-                      index < languageOptions.length - 1
-                        ? {
-                            borderBottomWidth: StyleSheet.hairlineWidth,
-                            borderBottomColor: theme.colors.divider,
-                          }
-                        : undefined,
-                    ]}
-                    onPress={() => {
-                      setLanguage(option.value);
-                      setShowLanguageMenu(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        {
-                          color:
-                            currentLanguage === option.value
-                              ? theme.colors.primary
-                              : theme.colors.text,
-                        },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                    {currentLanguage === option.value && (
-                      <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
-              onPress={() => setShowThemeMenu(!showThemeMenu)}
-            >
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                {t('settings.theme')}
-              </Text>
-              <View style={styles.dropdownValue}>
-                <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
-                  {themeOptions.find((o) => o.value === themeMode)?.label ??
-                    t('settings.themeAuto')}
-                </Text>
-                {showThemeMenu ? (
-                  <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
-                ) : (
-                  <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
-                )}
-              </View>
-            </TouchableOpacity>
-
-            {showThemeMenu && (
-              <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
-                {themeOptions.map((option, index) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.dropdownItem,
-                      index < themeOptions.length - 1
-                        ? {
-                            borderBottomWidth: StyleSheet.hairlineWidth,
-                            borderBottomColor: theme.colors.divider,
-                          }
-                        : undefined,
-                    ]}
-                    onPress={() => {
-                      setThemeMode(option.value);
-                      setShowThemeMenu(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        {
-                          color:
-                            themeMode === option.value ? theme.colors.primary : theme.colors.text,
-                        },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                    {themeMode === option.value && (
-                      <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {Platform.OS === 'android' && (
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.hideFromRecents')}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    {t('settings.hideFromRecentsDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localHideFromRecents}
-                  onValueChange={handleToggleHideFromRecents}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localHideFromRecents ? theme.colors.surface : theme.colors.textTertiary
-                  }
-                />
-              </View>
-            )}
-          </View>
-        </View>
+          {Platform.OS === 'android' && (
+            <SettingSwitch
+              label={t('settings.hideFromRecents')}
+              description={t('settings.hideFromRecentsDesc')}
+              value={localHideFromRecents}
+              onChange={handleToggleHideFromRecents}
+            />
+          )}
+        </SettingsSection>
 
         {/* 应用信息部分 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('settings.aboutSection')}
-            </Text>
-          </View>
+        <SettingsSection title={t('settings.aboutSection')}>
+          <SettingAction
+            label={`${t('settings.version')} ${appVersion}`}
+            buttonText={
+              isCheckingUpdate
+                ? t('settings.checkingUpdate')
+                : isDownloading
+                  ? t('settings.downloadingUpdate', { percent: Math.round(downloadProgress * 100) })
+                  : updateAvailable
+                    ? t('settings.updateAvailable', { version: latestVersion })
+                    : t('settings.checkUpdate')
+            }
+            buttonStyle={isDownloading || updateAvailable ? 'primary' : 'secondary'}
+            onPress={() => {
+              if (isCheckingUpdate) {
+                handleCancelUpdateCheck();
+              } else if (isDownloading) {
+                handleCancelDownload();
+              } else if (updateAvailable) {
+                handleUpdateButtonPress(
+                  latestVersion ?? '',
+                  latestAssetsRef.current,
+                  releaseNotesRef.current
+                );
+              } else {
+                runUpdateCheck(true, localUpdateToBetaEnabled);
+              }
+            }}
+          />
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
+          <SettingSwitch
+            label={t('settings.autoCheckUpdate')}
+            value={localAutoCheckUpdateEnabled}
+            onChange={handleToggleAutoCheckUpdate}
+          />
+
+          <SettingSwitch
+            label={t('settings.updateToBeta')}
+            value={localUpdateToBetaEnabled}
+            onChange={handleToggleUpdateToBeta}
+          />
+
+          <SettingDropdown
+            label={t('settings.updateChannel')}
+            options={[
+              { label: 'Gitee', value: 'gitee' as const },
+              { label: 'GitHub', value: 'github' as const },
             ]}
-          >
-            <View
-              style={[
-                styles.versionBlock,
-                {
-                  borderBottomWidth: StyleSheet.hairlineWidth,
-                  borderBottomColor: theme.colors.divider,
-                },
-              ]}
-            >
-              <View style={styles.versionTopRow}>
-                <View style={styles.versionLabelGroup}>
-                  <Text style={[styles.infoLabel, { color: theme.colors.textSecondary }]}>
-                    {t('settings.version')}
-                  </Text>
-                  <Text style={[styles.infoValue, { color: theme.colors.text }]}>{appVersion}</Text>
-                </View>
-                <View style={styles.versionButtonGroup}>
-                  <TouchableOpacity
-                    style={[
-                      styles.updateButton,
-                      {
-                        backgroundColor:
-                          isDownloading || updateAvailable
-                            ? theme.colors.primary
-                            : theme.colors.surface,
-                        borderColor: theme.colors.primary,
-                      },
-                    ]}
-                    onPress={() => {
-                      if (isDownloading) {
-                        handleCancelDownload();
-                      } else if (updateAvailable) {
-                        handleUpdateButtonPress(
-                          latestVersion ?? '',
-                          latestAssetsRef.current,
-                          releaseNotesRef.current
-                        );
-                      } else {
-                        runUpdateCheck(true, localUpdateToBetaEnabled);
-                      }
-                    }}
-                    disabled={isCheckingUpdate}
-                  >
-                    <Text
-                      style={[
-                        styles.updateButtonText,
-                        {
-                          color:
-                            isDownloading || updateAvailable
-                              ? theme.colors.white
-                              : theme.colors.primary,
-                        },
-                      ]}
-                    >
-                      {isCheckingUpdate
-                        ? t('settings.checkingUpdate')
-                        : isDownloading
-                          ? t('settings.downloadingUpdate', {
-                              percent: Math.round(downloadProgress * 100),
-                            })
-                          : updateAvailable
-                            ? t('settings.updateAvailable', { version: latestVersion })
-                            : t('settings.checkUpdate')}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
+            value={localUpdateChannel}
+            onChange={(value) => handleToggleUpdateChannel(value)}
+          />
 
-            <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.autoCheckUpdate')}
-                </Text>
-              </View>
-              <Switch
-                value={localAutoCheckUpdateEnabled}
-                onValueChange={handleToggleAutoCheckUpdate}
-                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                thumbColor={
-                  localAutoCheckUpdateEnabled ? theme.colors.surface : theme.colors.textTertiary
-                }
-              />
-            </View>
-
-            <View style={styles.settingRowNoBorder}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.updateToBeta')}
-                </Text>
-              </View>
-              <Switch
-                value={localUpdateToBetaEnabled}
-                onValueChange={handleToggleUpdateToBeta}
-                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                thumbColor={
-                  localUpdateToBetaEnabled ? theme.colors.surface : theme.colors.textTertiary
-                }
-              />
-            </View>
-
+          <SettingItem description={t('settings.openSource')}>
             <TouchableOpacity
-              style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}
-              onPress={() => setShowUpdateChannelMenu(!showUpdateChannelMenu)}
+              onPress={() => Linking.openURL('https://github.com/Jeric-X/syncclipboard-mobile')}
+              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
             >
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                {t('settings.updateChannel')}
-              </Text>
-              <View style={styles.dropdownValue}>
-                <Text style={[styles.dropdownValueText, { color: theme.colors.textSecondary }]}>
-                  {localUpdateChannel === 'github' ? 'GitHub' : 'Gitee'}
-                </Text>
-                {showUpdateChannelMenu ? (
-                  <ChevronUp color={theme.colors.textSecondary} width={18} height={18} />
-                ) : (
-                  <ChevronDown color={theme.colors.textSecondary} width={18} height={18} />
-                )}
-              </View>
+              <MaterialCommunityIcons name="github" size={24} color={theme.colors.textTertiary} />
             </TouchableOpacity>
-
-            {showUpdateChannelMenu && (
-              <View style={[styles.dropdownMenu, { borderColor: theme.colors.divider }]}>
-                <TouchableOpacity
-                  style={[
-                    styles.dropdownItem,
-                    {
-                      borderBottomWidth: StyleSheet.hairlineWidth,
-                      borderBottomColor: theme.colors.divider,
-                    },
-                  ]}
-                  onPress={() => {
-                    handleToggleUpdateChannel('gitee');
-                    setShowUpdateChannelMenu(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.dropdownItemText,
-                      {
-                        color:
-                          localUpdateChannel === 'gitee' ? theme.colors.primary : theme.colors.text,
-                      },
-                    ]}
-                  >
-                    Gitee
-                  </Text>
-                  {localUpdateChannel === 'gitee' && (
-                    <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    handleToggleUpdateChannel('github');
-                    setShowUpdateChannelMenu(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.dropdownItemText,
-                      {
-                        color:
-                          localUpdateChannel === 'github'
-                            ? theme.colors.primary
-                            : theme.colors.text,
-                      },
-                    ]}
-                  >
-                    GitHub
-                  </Text>
-                  {localUpdateChannel === 'github' && (
-                    <Check stroke={theme.colors.primary} width={18} height={18} strokeWidth={3} />
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <View style={styles.settingRowNoBorder}>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                  {t('settings.openSource')}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => Linking.openURL('https://github.com/Jeric-X/syncclipboard-mobile')}
-                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-              >
-                <MaterialCommunityIcons name="github" size={24} color={theme.colors.textTertiary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+          </SettingItem>
+        </SettingsSection>
 
         {/* 调试部分 */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderBase}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-              {t('settings.debugSection')}
-            </Text>
-          </View>
+        <SettingsSection title={t('settings.debugSection')}>
+          <SettingSwitch
+            label={t('settings.debugMode')}
+            value={localDebugModeEnabled}
+            onChange={handleToggleDebugMode}
+          />
 
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: theme.colors.surface, borderColor: theme.colors.divider },
-            ]}
-          >
-            <View
-              style={[
-                styles.settingRowNoBorder,
-                localDebugModeEnabled && {
-                  borderBottomWidth: StyleSheet.hairlineWidth,
-                  borderBottomColor: theme.colors.divider,
-                },
-              ]}
-            >
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  {t('settings.debugMode')}
-                </Text>
-              </View>
-              <Switch
-                value={localDebugModeEnabled}
-                onValueChange={handleToggleDebugMode}
-                trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                thumbColor={
-                  localDebugModeEnabled ? theme.colors.surface : theme.colors.textTertiary
-                }
-              />
-            </View>
+          {localDebugModeEnabled && Platform.OS === 'android' && (
+            <SettingSwitch
+              label={t('settings.debugOverlay')}
+              description={t('settings.debugOverlayDesc')}
+              value={localDebugOverlayVisible}
+              onChange={handleToggleDebugOverlayVisible}
+            />
+          )}
 
-            {localDebugModeEnabled && Platform.OS === 'android' && (
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.debugOverlay')}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    {t('settings.debugOverlayDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localDebugOverlayVisible}
-                  onValueChange={handleToggleDebugOverlayVisible}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localDebugOverlayVisible ? theme.colors.surface : theme.colors.textTertiary
-                  }
-                />
-              </View>
-            )}
+          {localDebugModeEnabled && (
+            <SettingSwitch
+              label={t('settings.debugUrlScheme')}
+              value={localDebugUrlScheme}
+              onChange={handleToggleDebugUrlScheme}
+            />
+          )}
 
-            {localDebugModeEnabled && (
-              <View
-                style={[
-                  styles.settingRowNoBorder,
-                  {
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    borderBottomColor: theme.colors.divider,
-                  },
-                ]}
-              >
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.debugUrlScheme')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localDebugUrlScheme}
-                  onValueChange={handleToggleDebugUrlScheme}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localDebugUrlScheme ? theme.colors.surface : theme.colors.textTertiary
-                  }
-                />
-              </View>
-            )}
+          {localDebugModeEnabled && (
+            <SettingAction
+              label={t('settings.debugSmsTest')}
+              buttonText={t('common.test')}
+              onPress={() => {
+                setSmsTestInput('');
+                setShowSmsTestModal(true);
+              }}
+            />
+          )}
 
-            {localDebugModeEnabled && (
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.debugSmsTest')}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-                  onPress={() => {
-                    setSmsTestInput('');
-                    setShowSmsTestModal(true);
-                  }}
-                >
-                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
-                    {t('common.test')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+          {localDebugModeEnabled && (
+            <SettingSwitch
+              label={t('settings.debugUpdateCheckNoLimit')}
+              description={t('settings.debugUpdateCheckNoLimitDesc')}
+              value={localDebugUpdateCheckNoLimit}
+              onChange={handleToggleDebugUpdateCheckNoLimit}
+            />
+          )}
 
-            {localDebugModeEnabled && (
-              <View style={[styles.settingRow, { borderBottomColor: theme.colors.divider }]}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.debugUpdateCheckNoLimit')}
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.colors.textTertiary }]}>
-                    {t('settings.debugUpdateCheckNoLimitDesc')}
-                  </Text>
-                </View>
-                <Switch
-                  value={localDebugUpdateCheckNoLimit}
-                  onValueChange={handleToggleDebugUpdateCheckNoLimit}
-                  trackColor={{ false: theme.colors.divider, true: theme.colors.primary }}
-                  thumbColor={
-                    localDebugUpdateCheckNoLimit ? theme.colors.surface : theme.colors.textTertiary
-                  }
-                />
-              </View>
-            )}
-
-            {localDebugModeEnabled && (
-              <View style={styles.settingRowNoBorder}>
-                <View style={styles.settingInfo}>
-                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    {t('settings.statistics')}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-                  onPress={handleShowStatistics}
-                >
-                  <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>
-                    {t('common.view')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
+          {localDebugModeEnabled && (
+            <SettingAction
+              label={t('settings.statistics')}
+              buttonText={t('common.view')}
+              onPress={handleShowStatistics}
+            />
+          )}
+        </SettingsSection>
 
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -2955,15 +2052,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  addButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   emptyCard: {
     marginHorizontal: 16,
     borderRadius: 12,
@@ -2979,182 +2067,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  card: {
-    marginHorizontal: 16,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  optionInfo: {
-    flex: 1,
-  },
-  optionLabel: {
-    fontSize: 16,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  infoLabel: {
-    fontSize: 16,
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  settingRowNoBorder: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  settingInfo: {
-    flex: 1,
-    marginRight: 16,
-  },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  settingDescription: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sizeInput: {
-    width: 80,
-    height: 40,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 16,
-    textAlign: 'right',
-  },
-  unitLabel: {
-    fontSize: 16,
-    marginLeft: 8,
-    fontWeight: '500',
-  },
   bottomPadding: {
     height: 40,
-  },
-  versionBlock: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  versionTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  versionButtonGroup: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  versionLabelGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  updateButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  updateButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  dropdownValue: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  dropdownValueText: {
-    fontSize: 16,
-  },
-  dropdownMenu: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  dropdownItemText: {
-    fontSize: 16,
-  },
-  clearButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  clearButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  buttonGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  exportButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  refreshButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  refreshButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  actionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  actionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   smsTestModalOverlay: {
     flex: 1,
