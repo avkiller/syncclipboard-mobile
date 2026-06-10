@@ -12,6 +12,7 @@ import { DedupedOperation } from '@/utils/DedupedOperation';
 import { File } from 'expo-file-system';
 import i18n from '@/i18n';
 import { setJustUploadedHash, setJustSetLocalHash } from './JustSetHash';
+import { saveSyncFileToUserPath } from './SyncFileSaveService';
 
 /** 比较两个 ClipboardContent 是否代表相同内容（用于去重继承判断） */
 function isSameContent(a: ClipboardContent, b: ClipboardContent): boolean {
@@ -106,6 +107,20 @@ export async function downloadRemoteClipboard(
   const actualContent = content ?? clipboardSyncState.getState().remoteContent;
   if (!actualContent) return null;
 
+  // 检查历史记录中是否已有该文件
+  if (actualContent.profileHash) {
+    const cachedItem = await historyService.getItem(actualContent.profileHash);
+    if (cachedItem?.fileUri) {
+      const cachedFile = new File(cachedItem.fileUri);
+      if (cachedFile.exists) {
+        const result = { ...actualContent, fileUri: cachedItem.fileUri };
+        // 仍需保存到用户指定目录
+        await saveSyncFileToUserPath(result);
+        return result;
+      }
+    }
+  }
+
   return _downloadOp.execute(actualContent, onProgress, signal ?? null, async (sig, notify) => {
     clipboardSyncState.setDownloadingRemote(true);
     clipboardSyncState.setDownloadProgress(null);
@@ -119,6 +134,12 @@ export async function downloadRemoteClipboard(
         sig
       );
       clipboardSyncState.setState({ remoteContent: result });
+
+      // 下载完成后，自动保存到用户指定目录
+      if (result) {
+        await saveSyncFileToUserPath(result);
+      }
+
       return result;
     } finally {
       clipboardSyncState.clearDownloadState();
@@ -168,16 +189,6 @@ export async function setLocalClipboardFromRemote(
     content.fileName !== undefined &&
     content.fileSize !== undefined &&
     !content.fileUri;
-
-  if (needsDownload && content.profileHash) {
-    const cachedItem = await historyService.getItem(content.profileHash);
-    if (cachedItem?.fileUri) {
-      const cachedFile = new File(cachedItem.fileUri);
-      if (cachedFile.exists) {
-        return { ...content, fileUri: cachedItem.fileUri };
-      }
-    }
-  }
 
   const finalContent = needsDownload
     ? await downloadRemoteClipboard(content, onProgress, signal)

@@ -4,6 +4,10 @@
  */
 
 import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as Sharing from 'expo-sharing';
+import { Directory, File } from 'expo-file-system';
 import { nativeCopyFile, nativeSaveFileToDownloads } from 'native-util';
 import i18n from '@/i18n';
 
@@ -30,9 +34,9 @@ function isDownloadsRootUri(directoryUri: string): boolean {
 }
 
 /**
- * 根据文件 URI / 文件名推断 MIME 类型（模块私有）
+ * 根据文件 URI / 文件名推断 MIME 类型
  */
-function getMimeTypeFromUri(fileUri: string): string {
+export function getMimeTypeFromUri(fileUri: string): string {
   const name = fileUri.split('?')[0].toLowerCase();
   if (name.endsWith('.apk')) return 'application/vnd.android.package-archive';
   if (name.endsWith('.pdf')) return 'application/pdf';
@@ -48,7 +52,7 @@ function getMimeTypeFromUri(fileUri: string): string {
     name.endsWith('.prm') // expo image format
   )
     return 'image/*';
-  return '*/*';
+  return 'application/octet-stream';
 }
 
 /**
@@ -57,8 +61,6 @@ function getMimeTypeFromUri(fileUri: string): string {
  * - Android 7+ 要求使用 content:// URI
  */
 export async function openFile(fileUri: string): Promise<void> {
-  const FileSystem = await import('expo-file-system/legacy');
-  const IntentLauncher = await import('expo-intent-launcher');
   const mimeType = getMimeTypeFromUri(fileUri);
 
   const contentUri = await FileSystem.getContentUriAsync(fileUri);
@@ -82,43 +84,64 @@ export async function openFile(fileUri: string): Promise<void> {
 }
 
 /**
- * 将文件储存到用户选择的目录（Android SAF）
+ * 将文件保存到指定目录（如果文件已存在则覆盖）
+ * @param fileUri 源文件 URI
+ * @param directoryUri 目标目录 URI
+ * @param fileName 文件名
+ * @param mimeType MIME 类型（可选，不提供则自动推断）
+ * @returns 保存后的文件 URI
+ */
+export async function saveFileToDirectory(
+  fileUri: string,
+  directoryUri: string,
+  fileName: string,
+  mimeType?: string
+): Promise<string> {
+  const resolvedMimeType = mimeType ?? getMimeTypeFromUri(fileUri);
+
+  // 先检查文件是否存在，如果存在则删除
+  const destDir = new Directory(directoryUri);
+  const existingFile = new File(destDir, fileName);
+  if (existingFile.exists) {
+    await FileSystem.deleteAsync(existingFile.uri);
+  }
+
+  const destUri = await FileSystem.StorageAccessFramework.createFileAsync(
+    directoryUri,
+    fileName,
+    resolvedMimeType
+  );
+
+  await nativeCopyFile(fileUri, destUri);
+  return destUri;
+}
+
+/**
+ * 将文件保存到用户选择的目录（弹出系统目录选择器）
  * 若用户选择了 Downloads 根目录，自动切换为 MediaStore.Downloads 写入以绕过 Android 11+ 限制。
- * Downloads 子目录通过 SAF 正常写入。
  */
 export async function saveFile(fileUri: string, fileName?: string): Promise<void> {
   const name = fileName || fileUri.split('/').pop() || 'file';
   const mimeType = getMimeTypeFromUri(fileUri);
-  const resolvedMime = mimeType === '*/*' ? 'application/octet-stream' : mimeType;
 
-  const FileSystem = await import('expo-file-system/legacy');
-  const { StorageAccessFramework } = FileSystem;
-
-  const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+  const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
   if (!permissions.granted) {
     throw new Error('Storage permission denied');
   }
 
   // 只有 Downloads 根目录才切换为 MediaStore（Android 11+ 限制根目录）
   if (isDownloadsRootUri(permissions.directoryUri)) {
-    await nativeSaveFileToDownloads(fileUri, name, resolvedMime, 'Download/');
+    await nativeSaveFileToDownloads(fileUri, name, mimeType, 'Download/');
     return;
   }
 
-  const destUri = await StorageAccessFramework.createFileAsync(
-    permissions.directoryUri,
-    name,
-    resolvedMime
-  );
-
-  await nativeCopyFile(fileUri, destUri);
+  await saveFileToDirectory(fileUri, permissions.directoryUri, name, mimeType);
 }
 
 /**
  * 通过系统分享对话框分享文件
  */
 export async function shareFile(fileUri: string, fileName?: string): Promise<void> {
-  const Sharing = await import('expo-sharing');
   const mimeType = getMimeTypeFromUri(fileUri);
   await Sharing.shareAsync(fileUri, {
     mimeType,

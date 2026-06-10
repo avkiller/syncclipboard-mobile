@@ -97,6 +97,8 @@ export const SettingsScreen = () => {
     setEnableShizukuClipboard,
     isTempDisabledBackgroundTasks,
     setTempDisabledBackgroundTasks,
+    setAutoSaveSyncFile,
+    setSyncFileSavePath,
   } = useSettingsStore();
 
   const [showServerModal, setShowServerModal] = useState(false);
@@ -136,6 +138,12 @@ export const SettingsScreen = () => {
   );
   const [localSmsForwardingEnabled, setLocalSmsForwardingEnabled] = useState(
     config?.enableSmsForwarding ?? false
+  );
+  const [localAutoSaveSyncFileEnabled, setLocalAutoSaveSyncFileEnabled] = useState(
+    config?.autoSaveSyncFile ?? false
+  );
+  const [localSyncFileSavePath, setLocalSyncFileSavePath] = useState(
+    config?.syncFileSavePath ?? ''
   );
   const [localForegroundNotification, setLocalForegroundNotification] = useState(
     config?.enableForegroundNotification ?? true
@@ -235,6 +243,14 @@ export const SettingsScreen = () => {
   useEffect(() => {
     setLocalSmsForwardingEnabled(config?.enableSmsForwarding ?? false);
   }, [config?.enableSmsForwarding]);
+
+  useEffect(() => {
+    setLocalAutoSaveSyncFileEnabled(config?.autoSaveSyncFile ?? false);
+  }, [config?.autoSaveSyncFile]);
+
+  useEffect(() => {
+    setLocalSyncFileSavePath(config?.syncFileSavePath ?? '');
+  }, [config?.syncFileSavePath]);
 
   useEffect(() => {
     setLocalForegroundNotification(config?.enableForegroundNotification ?? true);
@@ -710,6 +726,39 @@ export const SettingsScreen = () => {
     } catch (error: unknown) {
       setLocalSmsForwardingEnabled(!enabled);
       showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
+  // 处理切换自动保存同步文件
+  const handleToggleAutoSaveSyncFile = async (enabled: boolean) => {
+    setLocalAutoSaveSyncFileEnabled(enabled);
+    try {
+      await setAutoSaveSyncFile(enabled);
+      showMessage(
+        enabled ? t('settings.autoSaveSyncFileEnabled') : t('settings.autoSaveSyncFileDisabled'),
+        'success'
+      );
+    } catch (error: unknown) {
+      setLocalAutoSaveSyncFileEnabled(!enabled);
+      showMessage(error instanceof Error ? error.message : t('common.setFailed'), 'error');
+    }
+  };
+
+  // 处理选择同步文件保存路径
+  const handlePickSyncFileSavePath = async () => {
+    try {
+      const directory = await Directory.pickDirectoryAsync();
+      if (directory) {
+        const path = directory.uri;
+        setLocalSyncFileSavePath(path);
+        await setSyncFileSavePath(path);
+        showMessage(t('settings.syncFileSavePathSet'), 'success');
+      }
+    } catch (error: unknown) {
+      // 用户取消选择不显示错误
+      if (error instanceof Error && !error.message.includes('cancelled')) {
+        showMessage(error.message, 'error');
+      }
     }
   };
 
@@ -1491,6 +1540,22 @@ export const SettingsScreen = () => {
             placeholder="1"
             filter={filterPositiveInteger}
           />
+
+          <SettingSwitch
+            label={t('settings.autoSaveSyncFile')}
+            description={t('settings.autoSaveSyncFileDesc')}
+            value={localAutoSaveSyncFileEnabled}
+            onChange={handleToggleAutoSaveSyncFile}
+          />
+
+          {localAutoSaveSyncFileEnabled && (
+            <SettingAction
+              label={t('settings.syncFileSavePath')}
+              description={localSyncFileSavePath || t('settings.syncFileSavePathNotSet')}
+              buttonText={t('settings.syncFileSavePathPick')}
+              onPress={handlePickSyncFileSavePath}
+            />
+          )}
         </SettingsSection>
 
         {/* 历史记录部分 */}

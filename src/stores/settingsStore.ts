@@ -137,6 +137,12 @@ interface SettingsState {
   /** 设置自动上传短信验证码 */
   setEnableSmsForwarding: (enabled: boolean) => Promise<void>;
 
+  /** 设置自动保存同步文件 */
+  setAutoSaveSyncFile: (enabled: boolean) => Promise<void>;
+
+  /** 设置同步文件保存路径 */
+  setSyncFileSavePath: (path: string) => Promise<void>;
+
   // 导入/导出
   /** 导出配置 */
   exportConfig: () => Promise<string>;
@@ -373,6 +379,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   setEnableSmsForwarding: async (enabled: boolean) => {
     await get().updateConfig({ enableSmsForwarding: enabled });
+  },
+
+  setAutoSaveSyncFile: async (enabled: boolean) => {
+    await get().updateConfig({ autoSaveSyncFile: enabled });
+  },
+
+  setSyncFileSavePath: async (path: string) => {
+    await get().updateConfig({ syncFileSavePath: path });
   },
 
   exportConfig: async () => {

@@ -124,6 +124,12 @@ export interface AppConfig {
 
   /** 是否在历史记录的图片项显示复制按钮 */
   showImageCopyButton: boolean;
+
+  /** 自动保存同步文件 */
+  autoSaveSyncFile: boolean;
+
+  /** 同步文件保存路径 */
+  syncFileSavePath: string;
 }
 
 /**
@@ -329,6 +335,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   hideFromRecents: false, // 默认不隐藏最近任务
   historyImageAutoDownload: 'wifi', // 默认 Wi-Fi 网络自动下载
   showImageCopyButton: false, // 默认不显示图片复制按钮
+  autoSaveSyncFile: false, // 默认关闭自动保存同步文件
+  syncFileSavePath: '', // 默认保存路径为空
 };
 
 /**
