@@ -7,7 +7,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as Sharing from 'expo-sharing';
-import { nativeCopyFileToDirectory, type ProgressInfo } from 'native-util';
+import { nativeCopyFileToDirectory, resetSharingState, type ProgressInfo } from 'native-util';
 import i18n from '@/i18n';
 
 const APP_PACKAGE = 'com.jericx.syncclipboardmobile';
@@ -102,14 +102,36 @@ export async function saveFile(fileUri: string, fileName?: string): Promise<void
 
 /**
  * 通过系统分享对话框分享文件
+ * 自动处理 expo-sharing 的 pendingPromise 状态 bug
  */
 export async function shareFile(fileUri: string, fileName?: string): Promise<void> {
   const mimeType = getMimeTypeFromUri(fileUri);
-  await Sharing.shareAsync(fileUri, {
+  const options = {
     mimeType,
     dialogTitle: fileName || i18n.t('common.shareFile'),
     UTI: mimeType,
-  });
+  };
+
+  try {
+    await Sharing.shareAsync(fileUri, options);
+  } catch (error) {
+    // 检查是否是 expo-sharing 的状态锁问题
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Another share request is being processed')) {
+      // 重置 expo-sharing 的状态并重试
+      const resetSuccess = resetSharingState();
+      if (resetSuccess) {
+        try {
+          await Sharing.shareAsync(fileUri, options);
+          return; // 重试成功，直接返回
+        } catch (retryError) {
+          // 重试仍然失败，抛出原始错误
+          throw retryError;
+        }
+      }
+    }
+    throw error;
+  }
 }
 
 /**

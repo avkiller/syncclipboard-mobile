@@ -43,6 +43,7 @@ export interface ProgressInfo {
 
 export interface NativeUtilModuleType {
   moveTaskToBack(): boolean;
+  resetSharingState(): boolean;
   calculateStringMD5Base64(data: string): string;
   startCalculateFileMD5Base64(fileUri: string): string;
   startCalculateFileHash(fileUri: string): string;
@@ -88,6 +89,16 @@ export const isNativeHashModuleAvailable = Platform.OS === 'android';
 export function moveTaskToBack(): boolean {
   if (Platform.OS !== 'android') return false;
   return NativeUtilModule.moveTaskToBack();
+}
+
+/**
+ * 重置 expo-sharing 的 pendingPromise 状态。
+ * 用于解决 expo-sharing 的 bug：当分享对话框被取消或 Activity 重建时，
+ * pendingPromise 不会被清除，导致后续分享请求被拒绝。
+ */
+export function resetSharingState(): boolean {
+  if (Platform.OS !== 'android') return false;
+  return NativeUtilModule.resetSharingState();
 }
 
 /**

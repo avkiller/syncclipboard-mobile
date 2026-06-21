@@ -89,6 +89,46 @@ class NativeUtilModule : Module() {
             true
         }
 
+        /**
+         * 重置 expo-sharing 的 pendingPromise 状态。
+         * 用于解决 expo-sharing 的 bug：当分享对话框被取消或 Activity 重建时，
+         * pendingPromise 不会被清除，导致后续分享请求被拒绝。
+         * 会先 reject 旧的 Promise，避免资源泄露。
+         *
+         * 注意：此方法基于反射访问 expo-sharing 的私有字段 pendingPromise，
+         * 升级 expo-sharing 版本可能导致字段名变更或结构变化，从而使此方法失效。
+         * 如遇失效，需检查 expo-sharing 源码并更新反射逻辑。
+         */
+        Function("resetSharingState") {
+            try {
+                val sharingModule = appContext.registry.getModule("ExpoSharing")
+                if (sharingModule == null) {
+                    NativeLogger.w("NativeUtilModule", "ExpoSharing module not found")
+                    return@Function false
+                }
+
+                // 通过反射获取 pendingPromise 字段
+                val sharingModuleClass = sharingModule::class.java
+                val pendingPromiseField = sharingModuleClass.getDeclaredField("pendingPromise")
+                pendingPromiseField.isAccessible = true
+
+                // 先 reject 旧的 Promise，避免永远 pending
+                val oldPromise = pendingPromiseField.get(sharingModule) as? Promise
+                if (oldPromise != null) {
+                    oldPromise.reject("SHARE_CANCELLED", "Share was interrupted", null)
+                    NativeLogger.d("NativeUtilModule", "Rejected old pending Promise")
+                }
+
+                // 再清除状态
+                pendingPromiseField.set(sharingModule, null)
+                NativeLogger.d("NativeUtilModule", "ExpoSharing pendingPromise reset to null")
+                return@Function true
+            } catch (e: Exception) {
+                NativeLogger.e("NativeUtilModule", "Failed to reset ExpoSharing state", e)
+                return@Function false
+            }
+        }
+
         Function("calculateStringMD5Base64") { data: String ->
             val digest = MessageDigest.getInstance("MD5")
             val hashBytes = digest.digest(data.toByteArray(Charsets.UTF_8))
