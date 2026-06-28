@@ -84,12 +84,15 @@ const styles = StyleSheet.create({
   },
   input: {
     width: 80,
-    height: 40,
+    minHeight: 40,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
+    paddingVertical: 0,
     fontSize: 16,
+    lineHeight: 20,
     textAlign: 'right',
+    textAlignVertical: 'center',
   },
   unitLabel: {
     fontSize: 16,
