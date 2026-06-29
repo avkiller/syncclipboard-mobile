@@ -2,8 +2,9 @@
  * Update Service
  * 检查 GitHub/Gitee 最新 Release 版本更新
  */
-
+import i18n from '@/i18n';
 const GITHUB_RELEASES_API = 'https://api.github.com/repos/avkiller/syncclipboard-mobile/releases';
+const GITEE_RELEASES_API = ''
 const RELEASES_PAGE_URL = 'https://github.com/avkiller/syncclipboard-mobile/releases';
 const GITEE_RELEASES_PAGE_URL = '';
 const GITEE_DOWNLOAD_BASE = '';
@@ -193,4 +194,128 @@ async function checkForUpdateFromGitHub(
     assets: apkAssets,
     releaseNotes: latest.body,
   };
+}
+
+/**
+ * 从 Gitee API 获取最新版本
+ */
+async function checkForUpdateFromGitee(
+  currentVersionStr: string,
+  includeBeta: boolean,
+  abortSignal?: AbortSignal
+): Promise<UpdateCheckResult> {
+  console.log(
+    `[UpdateCheck] Gitee: 开始检查更新, 当前版本=${currentVersionStr}, 包含Beta=${includeBeta}`
+  );
+
+  const response = await fetch(GITEE_RELEASES_API, { signal: abortSignal });
+
+  if (!response.ok) {
+    console.log(`[UpdateCheck] Gitee: API 请求失败, status=${response.status}`);
+    throw new Error(i18n.t('error.giteeApiFailed', { status: response.status }));
+  }
+
+  console.log('[UpdateCheck] Gitee: API 请求成功');
+
+  const releases: Array<{
+    tag_name: string;
+    name?: string;
+    prerelease: boolean;
+    draft: boolean;
+    html_url: string;
+    body?: string;
+    assets: Array<{
+      name: string;
+      browser_download_url: string;
+    }>;
+  }> = await response.json();
+
+  console.log(`[UpdateCheck] Gitee: 获取到 ${releases.length} 个 Release`);
+  console.log(`[UpdateCheck] Gitee: Release 列表: ${releases.map((r) => r.tag_name).join(', ')}`);
+
+  const candidates = releases.filter((r) => {
+    if (r.draft) return false;
+    if (!includeBeta && r.prerelease) return false;
+    if (r.name && r.name.startsWith('WIP:')) {
+      console.log(`[UpdateCheck] Gitee: 跳过 WIP 版本: ${r.tag_name} (${r.name})`);
+      return false;
+    }
+    return true;
+  });
+
+  if (candidates.length === 0) {
+    console.log('[UpdateCheck] Gitee: 未找到可用的 Release');
+    return {
+      hasUpdate: false,
+      latestVersion: currentVersionStr,
+      tagName: '',
+      releaseUrl: RELEASES_PAGE_URL,
+      giteeReleaseUrl: GITEE_RELEASES_PAGE_URL,
+      assets: [],
+      releaseNotes: undefined,
+    };
+  }
+
+  const latest = candidates[0];
+
+  console.log(`[UpdateCheck] Gitee: 最新版本=${latest.tag_name}`);
+
+  const latestParsed = parseVersion(latest.tag_name);
+  const currentParsed = parseVersion(currentVersionStr);
+
+  const apkAssets: ReleaseAssetInfo[] = latest.assets
+    .filter((a) => a.name.endsWith('.apk'))
+    .map((a) => ({
+      name: a.name,
+      githubDownloadUrl: `https://github.com/Jeric-X/syncclipboard-mobile/releases/download/${latest.tag_name}/${a.name}`,
+      giteeDownloadUrl: a.browser_download_url,
+      sha256: undefined,
+    }));
+
+  console.log(`[UpdateCheck] Gitee: 找到 ${apkAssets.length} 个 APK 资源`);
+
+  if (!currentParsed || !latestParsed) {
+    console.log('[UpdateCheck] Gitee: 版本解析失败，无法比较');
+    return {
+      hasUpdate: false,
+      latestVersion: latest.tag_name,
+      tagName: latest.tag_name,
+      releaseUrl: `https://github.com/Jeric-X/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
+      giteeReleaseUrl: latest.html_url,
+      assets: apkAssets,
+      releaseNotes: latest.body,
+    };
+  }
+
+  const hasUpdate = compareVersions(latestParsed, currentParsed) > 0;
+  console.log(`[UpdateCheck] Gitee: 检查结果=${hasUpdate ? '有更新' : '已是最新'}`);
+
+  return {
+    hasUpdate,
+    latestVersion: versionToStr(latestParsed),
+    tagName: latest.tag_name,
+    releaseUrl: `https://github.com/Jeric-X/syncclipboard-mobile/releases/tag/${latest.tag_name}`,
+    giteeReleaseUrl: latest.html_url,
+    assets: apkAssets,
+    releaseNotes: latest.body,
+  };
+}
+
+/**
+ * 检查更新
+ * @param currentVersionStr 当前版本字符串
+ * @param includeBeta 是否包含 beta 版本，默认 false
+ * @param channel 更新通道，默认 'github'
+ * @param abortSignal 可选的 AbortSignal，用于取消请求
+ */
+export async function checkForUpdate(
+  currentVersionStr: string,
+  includeBeta = false,
+  channel: 'github' | 'gitee' = 'github',
+  abortSignal?: AbortSignal
+): Promise<UpdateCheckResult> {
+  if (channel === 'github') {
+    return checkForUpdateFromGitHub(currentVersionStr, includeBeta, abortSignal);
+  }
+  return checkForUpdateFromGitee(currentVersionStr, includeBeta, abortSignal);
 }
