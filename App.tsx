@@ -2,30 +2,20 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, Linking, ToastAndroid, StatusBar, View, Platform } from 'react-native';
 import { useEffect, useState } from 'react';
 import { ThemeProvider } from './src/contexts/ThemeContext';
+import { I18nProvider } from './src/contexts/I18nContext';
+import '@/i18n';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { QuickTileLoadingScreen } from './src/screens/QuickTileLoadingScreen';
 import { ShareReceiveScreen } from './src/screens/ShareReceiveScreen';
-import { ProcessTextScreen } from './src/screens/ProcessTextScreen';
 import { SyncDirection } from './src/types/sync';
 import { useSettingsStore } from './src/stores';
-import { initLogger } from './src/services/Logger';
+import { initLogger } from './src/utils/Logger';
 import { useTheme } from './src/hooks/useTheme';
 import { setDynamicShortcuts } from 'shortcut';
 import { moveTaskToBack, setExcludeFromRecents } from 'native-util';
-import { getBackgroundServiceManager } from './src/services/BackgroundServiceManager';
 
 const QUICK_UPLOAD_URL = 'syncclipboard://quick-upload';
 const QUICK_DOWNLOAD_URL = 'syncclipboard://quick-download';
-const PROCESS_TEXT_URL = 'syncclipboard://process-text';
-
-function parseProcessTextUrl(url: string | null): string | null {
-  if (!url || !url.startsWith(PROCESS_TEXT_URL)) return null;
-  try {
-    return new URL(url).searchParams.get('text');
-  } catch {
-    return null;
-  }
-}
 
 function parseQuickTileUrl(url: string | null): {
   isQuickTile: boolean;
@@ -57,7 +47,6 @@ export default function App() {
   const [appMode, setAppMode] = useState<AppMode>('checking');
   // 快速操作覆盖层：始终以 overlay 形式显示，不卸载 AppNavigator/HomeScreen
   const [shareReceiveOverlay, setShareReceiveOverlay] = useState(false);
-  const [processTextOverlay, setProcessTextOverlay] = useState<string | null>(null);
   const [quickActionOverlay, setQuickActionOverlay] = useState<{
     direction: SyncDirection;
     exitAfterSync: boolean;
@@ -75,35 +64,35 @@ export default function App() {
     }
   }, [isLoaded, loadConfig]);
 
-  // 启动所有服务（冷启动时保证剪贴板监控、远程同步、后台任务正常运行，后续由 BackgroundServiceManager 维护）
+  // 应用启动时恢复「最近任务隐藏」设置（仅 Android）
   useEffect(() => {
     if (!isLoaded) return;
-    getBackgroundServiceManager()
-      .start()
-      .catch(() => {});
-    // 应用启动时恢复「最近任务隐藏」设置（仅 Android）
     if (Platform.OS === 'android' && config?.hideFromRecents) {
       setExcludeFromRecents(true);
     }
-  }, [isLoaded]);
+  }, [isLoaded, config?.hideFromRecents]);
 
   useEffect(() => {
     if (!isLoaded) return;
 
     // Cold start: app launched via URL scheme
-    Linking.getInitialURL().then((url) => {
+    // 冷启动时 getInitialURL 可能为空，需要重试一次
+    const getInitialUrlWithRetry = async (): Promise<string | null> => {
+      let url = await Linking.getInitialURL();
+      if (!url) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        url = await Linking.getInitialURL();
+      }
+      return url;
+    };
+
+    getInitialUrlWithRetry().then((url) => {
       if (config?.debugUrlScheme) {
         ToastAndroid.show(`getInitialURL: ${url ?? 'null'}`, ToastAndroid.LONG);
       }
       if (isShareIntentUrl(url)) {
         setAppMode('home');
         setShareReceiveOverlay(true);
-        return;
-      }
-      const processText = parseProcessTextUrl(url);
-      if (processText) {
-        setAppMode('home');
-        setProcessTextOverlay(processText);
         return;
       }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
@@ -124,11 +113,6 @@ export default function App() {
         setShareReceiveOverlay(true);
         return;
       }
-      const processText = parseProcessTextUrl(url);
-      if (processText) {
-        setProcessTextOverlay(processText);
-        return;
-      }
       const { isQuickTile, fromForeground, direction } = parseQuickTileUrl(url);
       if (isQuickTile) {
         // fg=1 完成后留在 app，fg=0/无fg 完成后退出
@@ -142,47 +126,37 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.container}>
       <ThemeProvider>
-        <ThemedStatusBar />
-        {appMode === 'checking' ? null : <AppNavigator />}
-        {shareReceiveOverlay && (
-          <View style={StyleSheet.absoluteFill}>
-            <ShareReceiveScreen
-              onComplete={() => {
-                setShareReceiveOverlay(false);
-                // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
-                moveTaskToBack();
-              }}
-            />
-          </View>
-        )}
-        {quickActionOverlay && (
-          <View style={StyleSheet.absoluteFill}>
-            <QuickTileLoadingScreen
-              direction={quickActionOverlay.direction}
-              onLoadingComplete={() => {
-                const shouldExit = quickActionOverlay.exitAfterSync;
-                setQuickActionOverlay(null);
-                if (shouldExit) {
+        <I18nProvider>
+          <ThemedStatusBar />
+          {appMode === 'checking' ? null : <AppNavigator />}
+          {shareReceiveOverlay && (
+            <View style={StyleSheet.absoluteFill}>
+              <ShareReceiveScreen
+                onComplete={() => {
+                  setShareReceiveOverlay(false);
                   // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
                   moveTaskToBack();
-                }
-              }}
-              overlayMode
-            />
-          </View>
-        )}
-        {processTextOverlay && (
-          <View style={StyleSheet.absoluteFill}>
-            <ProcessTextScreen
-              text={processTextOverlay}
-              onComplete={() => {
-                setProcessTextOverlay(null);
-                // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
-                moveTaskToBack();
-              }}
-            />
-          </View>
-        )}
+                }}
+              />
+            </View>
+          )}
+          {quickActionOverlay && (
+            <View style={StyleSheet.absoluteFill}>
+              <QuickTileLoadingScreen
+                direction={quickActionOverlay.direction}
+                onLoadingComplete={() => {
+                  const shouldExit = quickActionOverlay.exitAfterSync;
+                  setQuickActionOverlay(null);
+                  if (shouldExit) {
+                    // 使用 moveTaskToBack 而非 exitApp，保持 Activity 存活以维持后台任务
+                    moveTaskToBack();
+                  }
+                }}
+                overlayMode
+              />
+            </View>
+          )}
+        </I18nProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );

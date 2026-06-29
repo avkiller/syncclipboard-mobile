@@ -3,29 +3,41 @@
  * 首页 - 显示当前剪贴板和同步状态
  */
 
-import React, { useState, useLayoutEffect, useMemo, useCallback } from 'react';
+import React, { useState, useLayoutEffect, useMemo, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import * as ClipboardProxy from '@/utils/clipboardProxy';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '@/hooks/useTheme';
-import { useClipboardStore } from '@/stores/clipboardStore';
+import { useLocalClipboardStore } from '@/stores/localClipboardStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useClipboardSyncServiceStore } from '@/stores/ClipboardSyncServiceStore';
+import { useClipboardSyncServiceStore } from '@/serviceState/ClipboardSyncState';
 import { ClipboardContent } from '@/types/clipboard';
 import { CurrentClipboardCard } from '@/components/CurrentClipboardCard';
 import { MessageToast } from '@/components/MessageToast';
 import { TopRightMenu, type MenuItemConfig } from '@/components/TopRightMenu';
 import { WordPickerScreen } from '@/screens/WordPickerScreen';
-import { copyToLocalClipboard } from '@/utils/clipboard';
 import { useMessageStore } from '@/stores/messageStore';
 import { useErrorStore } from '@/stores/errorStore';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
-import { getClipboardSyncService } from '@/services/ClipboardSyncService';
+import { createContentFromFile } from '@/utils/clipboard/clipboardContentUtils';
+import {
+  setRemoteClipboard,
+  uploadLocalClipboard,
+  cancelUploadLocalClipboard,
+  downloadRemoteClipboard,
+  cancelRemoteClipboardDownload,
+  refreshMonitor,
+} from '@/services/sync/ClipboardSyncActions';
+import type { ProgressInfo } from '@/types/progress';
+import { longRunningTaskManager } from '@/longRunningTask/LongRunningTaskManager';
 
 export function HomeScreen() {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [fileUploadPayload, setFileUploadPayload] = useState<{
@@ -44,35 +56,38 @@ export function HomeScreen() {
   const downloadingRemote = useClipboardSyncServiceStore((s) => s.downloadingRemote);
   const downloadProgress = useClipboardSyncServiceStore((s) => s.downloadProgress);
   const uploadingClipboard = useClipboardSyncServiceStore((s) => s.uploadingClipboard);
-  const fileUploadProgress = useClipboardSyncServiceStore((s) => s.fileUploadProgress);
+  const uploadProgress = useClipboardSyncServiceStore((s) => s.uploadProgress);
+  const [fileUploadProgress, setFileUploadProgress] = useState<ProgressInfo | null>(null);
+  const syncError = useClipboardSyncServiceStore((s) => s.syncError);
 
-  const { currentContent } = useClipboardStore();
+  const { currentContent } = useLocalClipboardStore();
   const { getActiveServer } = useSettingsStore();
+
+  // 启动所有后台任务（先加载字体，再启动后台任务，避免后台繁重任务导致导航栏图标加载缓慢）
+  useEffect(() => {
+    Ionicons.loadFont().then(() => {
+      longRunningTaskManager.startAll().catch(() => {});
+    });
+  }, []);
 
   const activeServer = getActiveServer();
 
-  // 复制远程内容到本地剪贴板，同时通知服务记录哈希
+  // 复制远程内容到本地剪贴板
   const copyRemoteToLocal = async (content: ClipboardContent, logPrefix: string = '') => {
-    const result = await copyToLocalClipboard(content);
-    if (result.success) {
-      useClipboardStore.getState().setCurrentContentDisplay(content);
-      getClipboardSyncService().recordLocalHash(content.profileHash || content.text || '');
-      console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
-    } else {
-      console.error(`[HomeScreen] ${logPrefix}Copy to local clipboard failed: ${result.message}`);
-    }
-    return result;
+    const { localClipboard } = await import('@/services');
+    await localClipboard.setClipboardContent(content, true);
+    console.log(`[HomeScreen] ${logPrefix}Copy to local clipboard completed`);
   };
 
   // 复制本地剪贴板内容（简单模式，直接设置到剪贴板）
   const copyLocalToClipboard = async (content: ClipboardContent) => {
     try {
-      const { clipboardManager } = await import('@/services');
-      await clipboardManager.setClipboardContent(content);
-      showMessage('已复制到剪贴板', 'success');
+      const { localClipboard } = await import('@/services');
+      await localClipboard.setClipboardContent(content);
+      showMessage(t('clipboard.copied'), 'success');
     } catch (error) {
       console.error('[HomeScreen] Failed to copy local content:', error);
-      showMessage('复制失败', 'error');
+      showMessage(t('clipboard.copyFailed'), 'error');
     }
   };
 
@@ -91,7 +106,7 @@ export function HomeScreen() {
 
       const asset = result.assets?.[0];
       if (!asset) {
-        showMessage('未选择文件', 'error');
+        showMessage(t('home.noFileSelected'), 'error');
         return;
       }
 
@@ -103,7 +118,7 @@ export function HomeScreen() {
       });
     } catch (error) {
       console.error('[HomeScreen] Failed to pick file:', error);
-      showMessage('选择文件失败', 'error');
+      showMessage(t('home.pickFileFailed'), 'error');
     }
   }, [showMessage]);
 
@@ -123,7 +138,7 @@ export function HomeScreen() {
 
       const asset = result.assets?.[0];
       if (!asset) {
-        showMessage('未选择图片', 'error');
+        showMessage(t('home.noImageSelected'), 'error');
         return;
       }
 
@@ -135,33 +150,43 @@ export function HomeScreen() {
       });
     } catch (error) {
       console.error('[HomeScreen] Failed to pick image:', error);
-      showMessage('选择图片失败', 'error');
+      showMessage(t('home.pickImageFailed'), 'error');
     }
   }, [showMessage]);
 
   const fileUploadTask = useCallback(
     async (signal: AbortSignal) => {
-      if (!fileUploadPayload) throw new Error('没有可上传的文件');
+      if (!fileUploadPayload) throw new Error(t('home.noFileToUpload'));
 
-      await getClipboardSyncService().uploadFile(fileUploadPayload, signal);
+      const content = await createContentFromFile(
+        fileUploadPayload.uri,
+        fileUploadPayload.fileName,
+        fileUploadPayload.mimeType,
+        fileUploadPayload.fileSize,
+        { signal }
+      );
+      await setRemoteClipboard(content, signal, (info) => {
+        setFileUploadProgress(info);
+      });
     },
-    [fileUploadPayload]
+    [fileUploadPayload, t]
   );
 
   const handleFileUploadComplete = useCallback(() => {
     setFileUploadPayload(null);
+    setFileUploadProgress(null);
   }, []);
 
   // 菜单项配置
   const menuItems = useMemo<MenuItemConfig[]>(
     () => [
       {
-        label: '上传图片',
+        label: t('home.uploadImage'),
         onPress: handleUploadImage,
         disabled: !!fileUploadPayload,
       },
       {
-        label: '上传文件',
+        label: t('home.uploadFile'),
         onPress: handleUploadFile,
         disabled: !!fileUploadPayload,
       },
@@ -180,7 +205,7 @@ export function HomeScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await getClipboardSyncService().refreshContent();
+      await refreshMonitor();
     } finally {
       setRefreshing(false);
     }
@@ -192,23 +217,10 @@ export function HomeScreen() {
       clearError();
 
       console.log('[HomeScreen] Starting upload...');
-      const result = await getClipboardSyncService().triggerUpload();
-      console.log('[HomeScreen] Upload result:', JSON.stringify(result, null, 2));
-
-      if (result.success) {
-        showMessage('剪贴板已上传到服务器', 'success');
-      } else {
-        const errorMessage = result.error || '上传失败';
-        console.log('[HomeScreen] Upload failed, setting error:', errorMessage);
-        setError({
-          title: '上传失败',
-          message: errorMessage,
-        });
-        showMessage('上传失败', 'error');
-      }
+      await uploadLocalClipboard();
     } catch (error: unknown) {
       console.error('[HomeScreen] Upload exception:', error);
-      const errorMessage = error instanceof Error ? error.message : '无法上传到服务器';
+      const errorMessage = error instanceof Error ? error.message : t('home.cantUploadToServer');
       const normalizedMessage = errorMessage.toLowerCase();
       const isCanceled =
         (error instanceof Error && error.name === 'AbortError') ||
@@ -217,7 +229,6 @@ export function HomeScreen() {
         normalizedMessage.includes('cancelled');
 
       if (isCanceled) {
-        showMessage('已取消上传', 'info');
         return;
       }
 
@@ -228,10 +239,10 @@ export function HomeScreen() {
           : errorMessage;
       console.log('[HomeScreen] Setting error details:', errorDetails);
       setError({
-        title: '上传失败',
+        title: t('home.uploadFailed'),
         message: errorDetails,
       });
-      showMessage('上传失败', 'error');
+      showMessage(t('home.uploadFailed'), 'error');
     }
   };
 
@@ -241,48 +252,50 @@ export function HomeScreen() {
       return;
     }
 
-    getClipboardSyncService().cancelUpload();
-    showMessage('正在取消上传...', 'info');
+    cancelUploadLocalClipboard();
+    showMessage(t('home.cancelingUpload'), 'info');
   }, [uploadingClipboard, showMessage]);
 
   const handleCopyError = async () => {
     if (error) {
       await ClipboardProxy.setStringAsync(`${error.title}\n\n${error.message}`);
-      showMessage('错误信息已复制', 'success');
+      showMessage(t('home.errorCopied'), 'success');
     }
   };
 
   // 检查是否需要下载文件
   const needsDownload = useMemo(() => {
     if (!remoteContent) return false;
-    return (
-      (remoteContent.type === 'Text' &&
-        remoteContent.hasData &&
-        remoteContent.fileName &&
-        !remoteContent.fileUri) ||
-      (remoteContent.type === 'Image' && remoteContent.fileName && !remoteContent.fileUri) ||
-      (remoteContent.type === 'File' && remoteContent.fileName && !remoteContent.fileUri)
-    );
+    return !!(remoteContent.hasData && remoteContent.fileName && !remoteContent.fileUri);
   }, [remoteContent]);
 
   // 下载远程剪贴板的文件数据
   const handleDownloadRemoteFile = async () => {
     if (!remoteContent || !needsDownload) return;
     try {
-      await getClipboardSyncService().downloadRemoteFile();
+      await downloadRemoteClipboard();
     } catch (error) {
       console.error('[HomeScreen] Failed to download remote file:', error);
-      showMessage('文件下载失败', 'error');
+      showMessage(t('home.fileDownloadFailed'), 'error');
     }
   };
 
   // 取消下载
   const handleCancelDownload = useCallback(() => {
-    getClipboardSyncService().cancelRemoteFileDownload();
+    cancelRemoteClipboardDownload();
   }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {syncError && (
+        <View style={[styles.syncErrorBanner, { backgroundColor: theme.colors.errorBackground }]}>
+          <View style={styles.syncErrorContent}>
+            <Text style={[styles.syncErrorTitle, { color: theme.colors.errorTitle }]}>
+              {syncError.title}
+            </Text>
+          </View>
+        </View>
+      )}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -300,28 +313,38 @@ export function HomeScreen() {
             {/* 远程剪贴板 */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-                远程剪贴板
+                {t('home.remoteClipboard')}
               </Text>
               {loadingRemote ? (
                 <View style={[styles.loadingCard, { backgroundColor: theme.colors.surface }]}>
                   <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
-                    加载中...
+                    {t('common.loading')}
                   </Text>
                 </View>
               ) : (
                 <CurrentClipboardCard
                   clipboard={remoteContent}
                   isRemote={true}
-                  onDownload={handleDownloadRemoteFile}
-                  downloading={downloadingRemote}
-                  downloadProgress={downloadProgress}
-                  onCancelDownload={handleCancelDownload}
+                  onAction={handleDownloadRemoteFile}
+                  acting={downloadingRemote}
+                  actionProgress={downloadProgress}
+                  onCancelAction={handleCancelDownload}
                   onCopy={async (content) => {
-                    const result = await copyRemoteToLocal(content, 'Manual copy: ');
-                    if (result.success) {
-                      showMessage('已复制到剪贴板', 'success');
-                    } else {
-                      showMessage(result.message || '复制失败', 'error');
+                    try {
+                      await copyRemoteToLocal(content, 'Manual copy: ');
+                      showMessage(
+                        content.type === 'Image'
+                          ? t('clipboard.imageCopied')
+                          : t('clipboard.copied'),
+                        'success'
+                      );
+                    } catch (error) {
+                      showMessage(
+                        error instanceof Error
+                          ? error.message || t('clipboard.copyFailed')
+                          : t('clipboard.copyFailed'),
+                        'error'
+                      );
                     }
                   }}
                   onWordPick={setWordPickerText}
@@ -332,14 +355,15 @@ export function HomeScreen() {
             {/* 本地剪贴板 */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-                本地剪贴板
+                {t('home.localClipboard')}
               </Text>
               <CurrentClipboardCard
                 clipboard={currentContent}
                 isRemote={false}
-                onUpload={handleUpload}
-                uploading={uploadingClipboard}
-                onCancelUpload={handleCancelClipboardUpload}
+                onAction={handleUpload}
+                acting={uploadingClipboard}
+                actionProgress={uploadProgress}
+                onCancelAction={handleCancelClipboardUpload}
                 onCopy={copyLocalToClipboard}
                 onWordPick={setWordPickerText}
               />
@@ -364,7 +388,7 @@ export function HomeScreen() {
                       onPress={handleCopyError}
                     >
                       <Text style={[styles.copyButtonText, { color: theme.colors.white }]}>
-                        复制错误
+                        {t('home.copyError')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -375,7 +399,7 @@ export function HomeScreen() {
                   </ScrollView>
                   <TouchableOpacity style={styles.dismissButton} onPress={() => clearError()}>
                     <Text style={[styles.dismissButtonText, { color: theme.colors.errorTitle }]}>
-                      关闭
+                      {t('common.close')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -397,9 +421,11 @@ export function HomeScreen() {
         {/* 空状态提示 */}
         {!activeServer && (
           <View style={[styles.emptyState, { backgroundColor: theme.colors.surface }]}>
-            <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>未配置服务器</Text>
+            <Text style={[styles.emptyStateTitle, { color: theme.colors.text }]}>
+              {t('home.noServerTitle')}
+            </Text>
             <Text style={[styles.emptyStateText, { color: theme.colors.textSecondary }]}>
-              请在"设置"页面添加服务器配置以启用同步功能
+              {t('home.noServerDescription')}
             </Text>
           </View>
         )}
@@ -414,11 +440,11 @@ export function HomeScreen() {
         <View style={styles.fullScreenOverlay}>
           <QuickLoadingPage
             task={fileUploadTask}
-            loadingText={fileUploadProgress?.stage ?? '正在处理文件…'}
-            successText="上传成功"
-            failureText="上传失败"
+            loadingText={t('home.uploadingFile')}
+            successText={t('home.uploadSuccess')}
+            failureText={t('home.uploadFailed')}
             onComplete={handleFileUploadComplete}
-            progress={fileUploadProgress?.progressInfo}
+            progress={fileUploadProgress}
             previewText={fileUploadPayload.fileName}
             previewImage={
               fileUploadPayload.mimeType?.startsWith('image/') ? fileUploadPayload.uri : undefined
@@ -442,6 +468,19 @@ const styles = StyleSheet.create({
   },
   fullScreenOverlay: {
     ...StyleSheet.absoluteFill,
+  },
+  syncErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  syncErrorContent: {
+    flex: 1,
+  },
+  syncErrorTitle: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   infoLabelSpaced: {

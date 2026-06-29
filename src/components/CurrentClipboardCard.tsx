@@ -3,7 +3,7 @@
  * 当前剪贴板内容卡片
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,11 +15,15 @@ import {
   Linking,
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 import { ClipboardContent } from '@/types/clipboard';
 import { useSettingsStore } from '@/stores';
 import { useMessageStore } from '@/stores/messageStore';
-import { openFile, shareFile, saveFile, saveToGallery } from '@/utils/fileActions';
+import { openFile, shareFile, saveToGallery } from '@/utils/fileActions';
 import { formatFileSize, formatSizeWithType, isTextInvalid } from '@/utils';
+import { saveContentDataToDirectory } from '@/utils/clipboard/clipboardContentUtils';
+import * as FileSystem from 'expo-file-system/legacy';
+import type { ProgressInfo } from 'native-util';
 
 interface DownloadProgress {
   progress: number;
@@ -30,13 +34,10 @@ interface DownloadProgress {
 interface CurrentClipboardCardProps {
   clipboard: ClipboardContent | null;
   isRemote?: boolean;
-  onUpload?: () => void;
-  uploading?: boolean;
-  onCancelUpload?: () => void;
-  onDownload?: () => void;
-  downloading?: boolean;
-  downloadProgress?: DownloadProgress | null;
-  onCancelDownload?: () => void;
+  onAction?: () => void;
+  acting?: boolean;
+  actionProgress?: DownloadProgress | null;
+  onCancelAction?: () => void;
   onCopy: (content: ClipboardContent) => Promise<void>;
   onWordPick?: (text: string) => void;
 }
@@ -44,21 +45,24 @@ interface CurrentClipboardCardProps {
 export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   clipboard,
   isRemote = false,
-  onUpload,
-  uploading = false,
-  onCancelUpload,
-  onDownload,
-  downloading = false,
-  downloadProgress,
-  onCancelDownload,
+  onAction,
+  acting = false,
+  actionProgress,
+  onCancelAction,
   onCopy,
   onWordPick,
 }) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const { config } = useSettingsStore();
   const { showMessage } = useMessageStore();
   const isDebugMode = config?.debugMode ?? false;
   const [, setUpdateTrigger] = useState(0);
+
+  // 保存操作状态
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<ProgressInfo | null>(null);
+  const saveAbortControllerRef = useRef<AbortController | null>(null);
 
   // 监控 clipboard 变化并强制更新
   useEffect(() => {
@@ -114,9 +118,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       >
         <View style={styles.emptyContent}>
           <Text style={[styles.emptyIcon, { color: theme.colors.textTertiary }]}>📋</Text>
-          <Text style={[styles.emptyTitle, { color: theme.colors.textSecondary }]}>剪贴板为空</Text>
+          <Text style={[styles.emptyTitle, { color: theme.colors.textSecondary }]}>
+            {t('clipboard.empty')}
+          </Text>
           <Text style={[styles.emptyDescription, { color: theme.colors.textTertiary }]}>
-            复制内容后将在此显示
+            {t('clipboard.emptyHint')}
           </Text>
         </View>
       </View>
@@ -130,6 +136,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       case 'Image':
         return '🖼️';
       case 'File':
+      case 'Group':
         return '📄';
       default:
         return '📋';
@@ -139,13 +146,14 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   const getTypeLabel = (type: string): string => {
     switch (type) {
       case 'Text':
-        return '文本';
+        return t('common.typeText');
       case 'Image':
-        return '图片';
+        return t('common.typeImage');
       case 'File':
-        return '文件';
+      case 'Group':
+        return t('common.typeFile');
       default:
-        return '未知';
+        return t('common.typeUnknown');
     }
   };
 
@@ -153,11 +161,11 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     const now = Date.now();
     const diff = now - timestamp;
 
-    if (diff < 60000) return '刚刚';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
+    if (diff < 60000) return t('common.timeJustNow');
+    if (diff < 3600000) return t('common.timeMinutesAgo', { minutes: Math.floor(diff / 60000) });
+    if (diff < 86400000) return t('common.timeHoursAgo', { hours: Math.floor(diff / 3600000) });
 
-    return new Date(timestamp).toLocaleDateString('zh-CN', {
+    return new Date(timestamp).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -168,13 +176,16 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   // 获取预览文本
   const getPreviewText = (): string => {
     if (clipboard.type === 'Text') {
-      return clipboard.text || '';
+      return clipboard.text;
     }
     if (clipboard.type === 'Image') {
-      return clipboard.fileName || '图片';
+      return clipboard.fileName || t('clipboard.imageFallback');
     }
     if (clipboard.type === 'File') {
-      return clipboard.fileName || '文件';
+      return clipboard.fileName || t('clipboard.fileFallback');
+    }
+    if (clipboard.type === 'Group') {
+      return clipboard.text || clipboard.fileName || t('clipboard.fileFallback');
     }
     return '';
   };
@@ -202,13 +213,19 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
       return !!(clipboard.fileName && !clipboard.fileUri && !clipboard.fileData);
     }
 
+    // Group类型：有 fileName 但没有 fileUri 或 fileData
+    if (clipboard.type === 'Group') {
+      return !!(clipboard.fileName && !clipboard.fileUri && !clipboard.fileData);
+    }
+
     return false;
   };
 
-  const showDownloadButton = isRemote && onDownload && needsFileDownload();
+  const showActionButton = isRemote ? !!(onAction && needsFileDownload()) : !!onAction;
 
-  // 可以"打开"的非文本类型（有 fileUri）
-  const canOpenFile = clipboard.type !== 'Text' && !!clipboard.fileUri;
+  // 可以"打开"的非文本类型（有 fileUri）- Group类型不支持打开
+  const canOpenFile =
+    clipboard.type !== 'Text' && clipboard.type !== 'Group' && !!clipboard.fileUri;
 
   // 打开文件
   const handleOpenFile = async () => {
@@ -220,9 +237,12 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
     }
   };
 
-  // 判断是否显示分享按钮（非Text类型且有文件URI）
+  // 判断是否显示分享按钮（非Text类型且有文件URI，Group类型除外）
   const canShowShareButton = (() => {
     if (!clipboard || clipboard.type === 'Text') return false;
+
+    // Group类型不显示分享按钮
+    if (clipboard.type === 'Group') return false;
 
     // 图片类型：需要有 fileUri
     if (clipboard.type === 'Image') return !!clipboard.fileUri;
@@ -233,26 +253,74 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
   })();
 
   // 判断是否显示保存按钮（非Text类型且有文件URI）
-  const canShowSaveButton = canShowShareButton;
+  const canShowSaveButton = (() => {
+    if (!clipboard || clipboard.type === 'Text') return false;
+
+    // 图片类型：需要有 fileUri
+    if (clipboard.type === 'Image') return !!clipboard.fileUri;
+    // 文件类型：需要有 fileUri
+    if (clipboard.type === 'File') return !!clipboard.fileUri;
+    // Group类型：需要有 fileUri
+    if (clipboard.type === 'Group') return !!clipboard.fileUri;
+
+    return false;
+  })();
+
+  // 取消保存
+  const handleCancelSave = () => {
+    saveAbortControllerRef.current?.abort();
+  };
+
+  const canCancelSave = !!saveAbortControllerRef.current;
 
   // 保存文件到用户选择的目录（图片类型保存到相册）
   const handleSaveFile = async () => {
-    if (!clipboard.fileUri) return;
+    if (!clipboard || !clipboard.fileUri) return;
     try {
+      // 图片类型直接保存到相册
       if (clipboard.type === 'Image') {
+        setIsSaving(true);
         await saveToGallery(clipboard.fileUri);
-        showMessage('已保存到相册', 'success');
-      } else {
-        await saveFile(clipboard.fileUri, clipboard.fileName);
-        showMessage('已储存到设备', 'success');
+        showMessage(t('clipboard.savedToGallery'), 'success');
+        return;
       }
+
+      // 其他类型：先选择文件夹
+      const permissions =
+        await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        showMessage(t('history.saveCanceled'), 'info');
+        return;
+      }
+
+      // 创建 AbortController 用于取消
+      const abortController = new AbortController();
+      saveAbortControllerRef.current = abortController;
+      setIsSaving(true);
+      setSaveProgress(null);
+
+      await saveContentDataToDirectory(
+        clipboard,
+        permissions.directoryUri,
+        abortController.signal,
+        (info) => setSaveProgress(info)
+      );
+      showMessage(t('clipboard.savedToDevice'), 'success');
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        // 用户取消，不显示错误
+        return;
+      }
       if (error instanceof Error && error.message === 'Media library permission denied') {
-        showMessage('需要相册权限才能保存图片', 'error');
+        showMessage(t('clipboard.galleryPermissionRequired'), 'error');
         return;
       }
       console.error('[CurrentClipboardCard] Failed to save file:', error);
-      showMessage('保存失败', 'error');
+      showMessage(t('clipboard.saveFailed'), 'error');
+    } finally {
+      setIsSaving(false);
+      setSaveProgress(null);
+      saveAbortControllerRef.current = null;
     }
   };
 
@@ -272,7 +340,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               {getTypeLabel(clipboard.type)}
             </Text>
             <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
-              {clipboard.timestamp ? formatTime(clipboard.timestamp) : '刚刚'}
+              {clipboard.timestamp ? formatTime(clipboard.timestamp) : t('common.timeJustNow')}
             </Text>
           </View>
         </View>
@@ -300,16 +368,10 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             {clipboard.fileUri ? (
               <>
                 <Image
-                  key={`image-${clipboard.localClipboardHash?.substring(0, 12)}-${
-                    clipboard.timestamp
-                  }`}
+                  key={`image-${clipboard.fileUri}-${clipboard.localClipboardHash?.substring(0, 12)}`}
                   source={{
-                    uri: `${clipboard.fileUri}?hash=${
-                      clipboard.localClipboardHash?.substring(0, 12) ||
-                      clipboard.timestamp ||
-                      Date.now()
-                    }`,
-                    cache: 'reload',
+                    uri: clipboard.fileUri,
+                    cache: 'force-cache',
                   }}
                   style={styles.imagePreview}
                   resizeMode="contain"
@@ -334,10 +396,7 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             ) : (
               <View>
                 <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
-                  {clipboard.fileName || '图片文件'}
-                </Text>
-                <Text style={[styles.mediaHint, { color: theme.colors.textTertiary }]}>
-                  等待下载...
+                  {clipboard.fileName || t('clipboard.imageFileLabel')}
                 </Text>
               </View>
             )}
@@ -347,13 +406,16 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
         {clipboard.type === 'File' && (
           <View style={styles.mediaPreview}>
             <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
-              {clipboard.fileName || '文件'}
+              {clipboard.fileName || t('common.typeFile')}
             </Text>
-            {clipboard.fileUri && (
-              <Text style={[styles.mediaHint, { color: theme.colors.textTertiary }]}>
-                包含文件数据
-              </Text>
-            )}
+          </View>
+        )}
+
+        {clipboard.type === 'Group' && (
+          <View style={styles.mediaPreview}>
+            <Text style={[styles.mediaLabel, { color: theme.colors.textSecondary }]}>
+              {clipboard.text || clipboard.fileName || t('common.typeFileGroup')}
+            </Text>
           </View>
         )}
       </View>
@@ -366,7 +428,13 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
             onPress={() => Linking.openURL(detectedUrl)}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>打开链接</Text>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {t('clipboard.openLink')}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -376,12 +444,18 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
             onPress={() => onWordPick(clipboard.text!)}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>分词</Text>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {t('clipboard.wordPick')}
+            </Text>
           </TouchableOpacity>
         )}
 
         {/* 远程 Text 类型：只有在不需要下载时才显示复制按钮 */}
-        {isRemote && clipboard.type === 'Text' && !showDownloadButton && (
+        {isRemote && clipboard.type === 'Text' && !showActionButton && (
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -390,7 +464,13 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             ]}
             onPress={() => onCopy(clipboard)}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>复制</Text>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {t('common.copy')}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -400,17 +480,52 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
             onPress={handleOpenFile}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>打开</Text>
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {t('clipboard.open')}
+            </Text>
           </TouchableOpacity>
         )}
 
         {/* 非Text类型且已下载：保存按钮 */}
         {canShowSaveButton && (
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-            onPress={handleSaveFile}
+            style={[
+              styles.actionButton,
+              { backgroundColor: theme.colors.primary },
+              isSaving && styles.actionButtonLast,
+              isSaving && !canCancelSave && styles.actionButtonDisabled,
+            ]}
+            onPress={isSaving && canCancelSave ? handleCancelSave : handleSaveFile}
+            disabled={isSaving && !canCancelSave}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>保存</Text>
+            {isSaving && saveProgress && (
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: theme.colors.primary,
+                    width: `${Math.min(saveProgress.progress * 100, 100)}%`,
+                  },
+                ]}
+              />
+            )}
+            <Text
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {isSaving && saveProgress && saveProgress.totalBytes > 0
+                ? `${(saveProgress.progress * 100).toFixed(0)}% ${formatFileSize(
+                    saveProgress.bytesTransferred
+                  )} / ${formatFileSize(saveProgress.totalBytes)}`
+                : isSaving
+                  ? t('clipboard.saving')
+                  : t('clipboard.save')}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -424,34 +539,18 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
             ]}
             onPress={handleShare}
           >
-            <Text style={[styles.actionButtonText, { color: theme.colors.white }]}>分享</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* 同步操作按钮 */}
-        {!isRemote && onUpload && (
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              styles.secondaryButton,
-              styles.actionButtonLast,
-              { borderColor: theme.colors.primary },
-            ]}
-            onPress={uploading ? onCancelUpload : onUpload}
-          >
             <Text
-              style={[
-                styles.actionButtonText,
-                styles.secondaryButtonText,
-                { color: theme.colors.primary },
-              ]}
+              style={[styles.actionButtonText, { color: theme.colors.white }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
-              {uploading ? '取消' : '上传'}
+              {t('clipboard.share')}
             </Text>
           </TouchableOpacity>
         )}
 
-        {showDownloadButton && (
+        {/* 同步操作按钮 */}
+        {showActionButton && (
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -459,15 +558,15 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
               styles.actionButtonLast,
               { borderColor: theme.colors.primary },
             ]}
-            onPress={downloading ? onCancelDownload : onDownload}
+            onPress={acting ? onCancelAction : onAction}
           >
-            {downloading && downloadProgress && (
+            {acting && actionProgress && (
               <View
                 style={[
                   styles.progressFill,
                   {
                     backgroundColor: theme.colors.primary,
-                    width: `${downloadProgress.progress * 100}%`,
+                    width: `${actionProgress.progress * 100}%`,
                   },
                 ]}
               />
@@ -478,12 +577,18 @@ export const CurrentClipboardCard: React.FC<CurrentClipboardCardProps> = ({
                 styles.secondaryButtonText,
                 { color: theme.colors.primary },
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
             >
-              {downloading && downloadProgress
-                ? `${(downloadProgress.progress * 100).toFixed(0)}%  ${formatFileSize(downloadProgress.bytesTransferred)} / ${formatFileSize(downloadProgress.totalBytes)}`
-                : downloading
-                  ? '取消'
-                  : '下载'}
+              {acting && actionProgress
+                ? `${(actionProgress.progress * 100).toFixed(0)}%  ${formatFileSize(
+                    actionProgress.bytesTransferred
+                  )} / ${formatFileSize(actionProgress.totalBytes)}`
+                : acting
+                  ? t('common.cancel')
+                  : isRemote
+                    ? t('clipboard.download')
+                    : t('clipboard.upload')}
             </Text>
           </TouchableOpacity>
         )}
@@ -563,20 +668,26 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    height: 40,
+    paddingHorizontal: 12,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   actionButtonLast: {},
+  actionButtonDisabled: {
+    opacity: 0.7,
+  },
   secondaryButton: {
     borderWidth: 1,
   },
   actionButtonText: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  actionButtonTextWrapper: {
+    flex: 1,
   },
   secondaryButtonText: {
     fontWeight: '500',
@@ -596,9 +707,6 @@ const styles = StyleSheet.create({
   mediaLabel: {
     fontSize: 15,
     marginBottom: 4,
-  },
-  mediaHint: {
-    fontSize: 13,
   },
   footer: {
     paddingTop: 12,

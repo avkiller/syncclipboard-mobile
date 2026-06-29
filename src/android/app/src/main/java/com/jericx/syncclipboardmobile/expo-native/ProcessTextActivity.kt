@@ -1,49 +1,48 @@
 package com.avkiller.syncclipboardmobile.processtext
 
-import android.app.Activity
-import android.content.Intent
-import android.net.Uri
+import android.content.res.Configuration
 import android.os.Bundle
-import expo.modules.nativeutil.NativeLogger
+
+import com.facebook.react.ReactActivity
+import com.facebook.react.ReactActivityDelegate
+import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
+import com.facebook.react.defaults.DefaultReactActivityDelegate
+
+import com.jericx.syncclipboardmobile.BuildConfig
+import expo.modules.ReactActivityDelegateWrapper
 
 /**
- * Trampoline Activity for Android "Process Text" floating toolbar action.
- * Receives the selected text via PROCESS_TEXT intent, encodes it in a deep link URL,
- * and forwards it to the main React Native Activity.
+ * Transparent Activity for Android "Process Text" floating toolbar action.
+ * Receives the selected text via PROCESS_TEXT intent and renders
+ * a semi-transparent overlay for uploading without showing the main app UI.
+ * Reuses QuickActionApp component with text parameter.
  */
-class ProcessTextActivity : Activity() {
-
-    companion object {
-        private const val TAG = "ProcessTextActivity"
-    }
+class ProcessTextActivity : ReactActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        super.onCreate(null)
+    }
 
-        val text = intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()
-        if (text.isNullOrEmpty()) {
-            NativeLogger.w(TAG, "No text received in PROCESS_TEXT intent")
-            finish()
-            return
-        }
+    override fun getMainComponentName(): String = "quickAction"
 
-        NativeLogger.d(TAG, "Received process text: ${text.take(50)}")
-
-        val encodedText = Uri.encode(text)
-        val url = "syncclipboard://process-text?text=$encodedText"
-
-        val mainIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
-
-        try {
-            startActivity(mainIntent)
-        } catch (e: Exception) {
-            NativeLogger.e(TAG, "Failed to start main activity", e)
-        }
-
-        finish()
+    override fun createReactActivityDelegate(): ReactActivityDelegate {
+        return ReactActivityDelegateWrapper(
+            this,
+            BuildConfig.IS_NEW_ARCHITECTURE_ENABLED,
+            object : DefaultReactActivityDelegate(
+                this,
+                mainComponentName,
+                fabricEnabled
+            ) {
+                override fun getLaunchOptions(): Bundle? {
+                    val isDarkMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+                    val text = intent?.getCharSequenceExtra(android.content.Intent.EXTRA_PROCESS_TEXT)?.toString() ?: ""
+                    return Bundle().apply {
+                        putString("text", text)
+                        putString("systemTheme", if (isDarkMode) "dark" else "light")
+                    }
+                }
+            }
+        )
     }
 }

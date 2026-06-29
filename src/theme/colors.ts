@@ -56,6 +56,7 @@ export const lightColors = {
   transparent: 'transparent',
   imagePlaceholder: '#F0F0F0',
   borderSubtle: 'rgba(0, 0, 0, 0.1)',
+  shadow: '#000000',
 
   // Tab Bar
   tabBarBackground: '#F9F9F9',
@@ -123,6 +124,7 @@ export const darkColors = {
   transparent: 'transparent',
   imagePlaceholder: '#2C2C2E',
   borderSubtle: 'rgba(255, 255, 255, 0.1)',
+  shadow: '#FFFFFF',
 
   // Tab Bar
   tabBarBackground: '#1C1C1E',

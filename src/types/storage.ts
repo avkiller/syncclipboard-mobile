@@ -4,7 +4,7 @@
  */
 
 import { ServerConfig } from './api';
-import { SyncMode, ConflictResolution } from './sync';
+import { ConflictResolution } from './sync';
 import { HistorySyncStatus } from './clipboard';
 
 /**
@@ -17,20 +17,11 @@ export interface AppConfig {
   /** 当前激活的服务器索引 */
   activeServerIndex: number;
 
-  /** 同步模式 */
-  syncMode: SyncMode;
-
   /** 同步间隔（毫秒） */
   syncInterval: number;
 
   /** 冲突解决策略 */
   conflictResolution: ConflictResolution;
-
-  /** 是否启用离线队列 */
-  enableOfflineQueue: boolean;
-
-  /** 最大离线队列大小 */
-  maxOfflineQueueSize: number;
 
   /** 是否同步大文件 */
   syncLargeFiles: boolean;
@@ -73,6 +64,9 @@ export interface AppConfig {
 
   /** 是否更新到测试版（beta） */
   updateToBeta: boolean;
+
+  /** 更新通道 */
+  updateChannel: 'github' | 'gitee';
 
   /** 是否启用历史记录同步 */
   enableHistorySync: boolean;
@@ -130,6 +124,12 @@ export interface AppConfig {
 
   /** 是否在历史记录的图片项显示复制按钮 */
   showImageCopyButton: boolean;
+
+  /** 自动保存同步文件 */
+  autoSaveSyncFile: boolean;
+
+  /** 同步文件保存路径 */
+  syncFileSavePath: string;
 }
 
 /**
@@ -268,6 +268,30 @@ export const STORAGE_KEYS = {
 
   /** 上次同步时间 */
   LAST_SYNC: '@syncclipboard:last_sync',
+
+  /** SyncManager 上次成功上传的 profileHash */
+  SYNC_LAST_HASH: '@syncclipboard:sync:last_hash',
+
+  /** HistorySyncService 上次完整同步时间（ms）*/
+  HISTORY_LAST_SYNC_TIME: '@syncclipboard:history:last_sync_time',
+
+  /** HistoryScreen 排序字段 */
+  HISTORY_SORT_FIELD: '@syncclipboard:history:sort_field',
+
+  /** 认证凭据（AuthService 缓存） */
+  AUTH_CREDENTIALS: '@syncclipboard:credentials',
+
+  /** 用户选择的主题模式 */
+  THEME_MODE: '@syncclipboard:theme_mode',
+
+  /** HistoryTracker 上次记录的 clipboard hash */
+  HISTORY_TRACKER_LAST_HASH: '@last_clipboard_hash',
+
+  /** SecureStorage 前缀 */
+  SECURE_PREFIX: '@syncclipboard:secure:',
+
+  /** useHistoryDisplaySettings 存储键 */
+  HISTORY_DISPLAY_SETTINGS: '@syncclipboard:history_display_settings',
 } as const;
 
 /**
@@ -276,11 +300,8 @@ export const STORAGE_KEYS = {
 export const DEFAULT_APP_CONFIG: AppConfig = {
   servers: [],
   activeServerIndex: -1,
-  syncMode: 'manual' as SyncMode,
   syncInterval: 5000,
   conflictResolution: 'newest' as ConflictResolution,
-  enableOfflineQueue: true,
-  maxOfflineQueueSize: 100,
   syncLargeFiles: true,
   largeFileThreshold: 10 * 1024 * 1024, // 10MB
   theme: 'auto',
@@ -295,6 +316,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   autoCheckUpdate: true,
   lastUpdateCheckDate: '',
   updateToBeta: false,
+  updateChannel: 'github',
   enableHistorySync: false, // 默认关闭历史记录同步
   logLevel: 'info', // 默认 info 级别
   remotePollingInterval: 3000, // 默认 3 秒
@@ -313,6 +335,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   hideFromRecents: false, // 默认不隐藏最近任务
   historyImageAutoDownload: 'wifi', // 默认 Wi-Fi 网络自动下载
   showImageCopyButton: false, // 默认不显示图片复制按钮
+  autoSaveSyncFile: false, // 默认关闭自动保存同步文件
+  syncFileSavePath: '', // 默认保存路径为空
 };
 
 /**

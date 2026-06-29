@@ -1,6 +1,7 @@
 package expo.modules.shortcut
 
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
@@ -18,31 +19,44 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 class ShortcutModule : Module() {
     companion object {
+        private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
         private const val DOWNLOAD_SHORTCUT_ID = "shortcut_download"
-        private const val DOWNLOAD_LABEL = "下载剪贴板"
         private const val DOWNLOAD_DIRECTION = "download"
         private const val DOWNLOAD_ICON_RES = "ic_tile_download"
         private const val DOWNLOAD_BG_COLOR = "#007AFF"
 
         private const val UPLOAD_SHORTCUT_ID = "shortcut_upload"
-        private const val UPLOAD_LABEL = "上传剪贴板"
         private const val UPLOAD_DIRECTION = "upload"
         private const val UPLOAD_ICON_RES = "ic_tile_upload"
         private const val UPLOAD_BG_COLOR = "#007AFF"
 
         private const val QUICK_ACTION_ACTIVITY = "com.avkiller.syncclipboardmobile.quickaction.QuickActionActivity"
 
+        private fun getAppString(context: Context, name: String): String {
+            val resId = context.resources.getIdentifier(name, "string", APP_PACKAGE)
+            return if (resId != 0) context.getString(resId) else name
+        }
     }
 
     override fun definition() = ModuleDefinition {
         Name("ShortcutModule")
 
         AsyncFunction("requestPinDownloadShortcut") { promise: Promise ->
-            requestPinShortcutInternal(DOWNLOAD_SHORTCUT_ID, DOWNLOAD_LABEL, DOWNLOAD_DIRECTION, DOWNLOAD_ICON_RES, DOWNLOAD_BG_COLOR, promise)
+            val reactContext = appContext.reactContext ?: run {
+                promise.reject(ReactContextMissingError())
+                return@AsyncFunction
+            }
+            val label = getAppString(reactContext, "shortcut_download_label")
+            requestPinShortcutInternal(DOWNLOAD_SHORTCUT_ID, label, DOWNLOAD_DIRECTION, DOWNLOAD_ICON_RES, DOWNLOAD_BG_COLOR, promise)
         }
 
         AsyncFunction("requestPinUploadShortcut") { promise: Promise ->
-            requestPinShortcutInternal(UPLOAD_SHORTCUT_ID, UPLOAD_LABEL, UPLOAD_DIRECTION, UPLOAD_ICON_RES, UPLOAD_BG_COLOR, promise)
+            val reactContext = appContext.reactContext ?: run {
+                promise.reject(ReactContextMissingError())
+                return@AsyncFunction
+            }
+            val label = getAppString(reactContext, "shortcut_upload_label")
+            requestPinShortcutInternal(UPLOAD_SHORTCUT_ID, label, UPLOAD_DIRECTION, UPLOAD_ICON_RES, UPLOAD_BG_COLOR, promise)
         }
 
         Function("setDynamicShortcuts") {
@@ -51,8 +65,10 @@ class ShortcutModule : Module() {
                 val shortcutManager = reactContext.getSystemService(ShortcutManager::class.java)
                     ?: return@Function false
 
-                val downloadShortcut = createShortcutInfo(reactContext, DOWNLOAD_SHORTCUT_ID, DOWNLOAD_LABEL, DOWNLOAD_DIRECTION, DOWNLOAD_ICON_RES, DOWNLOAD_BG_COLOR)
-                val uploadShortcut = createShortcutInfo(reactContext, UPLOAD_SHORTCUT_ID, UPLOAD_LABEL, UPLOAD_DIRECTION, UPLOAD_ICON_RES, UPLOAD_BG_COLOR)
+                val downloadLabel = getAppString(reactContext, "shortcut_download_label")
+                val uploadLabel = getAppString(reactContext, "shortcut_upload_label")
+                val downloadShortcut = createShortcutInfo(reactContext, DOWNLOAD_SHORTCUT_ID, downloadLabel, DOWNLOAD_DIRECTION, DOWNLOAD_ICON_RES, DOWNLOAD_BG_COLOR)
+                val uploadShortcut = createShortcutInfo(reactContext, UPLOAD_SHORTCUT_ID, uploadLabel, UPLOAD_DIRECTION, UPLOAD_ICON_RES, UPLOAD_BG_COLOR)
 
                 shortcutManager.dynamicShortcuts = listOf(uploadShortcut, downloadShortcut)
                 true

@@ -94,6 +94,7 @@ class NativeSignalRClient {
   private stateSub: EventSubscription | null = null;
   private profileCallbacks = new Set<RemoteClipboardChangedCallback>();
   private historyCallbacks = new Set<RemoteHistoryChangedCallback>();
+  private stateCallbacks = new Set<(state: ConnectionState) => void>();
 
   constructor(nativeModule: NativeSignalRModule) {
     this.nativeModule = nativeModule;
@@ -123,6 +124,17 @@ class NativeSignalRClient {
           cb(event);
         } catch (e) {
           console.error('[NativeSignalRClient] Error in history callback:', e);
+        }
+      });
+    });
+
+    this.stateSub?.remove();
+    this.stateSub = this.nativeModule.addListener('onStateChanged', (event) => {
+      this.stateCallbacks.forEach((cb) => {
+        try {
+          cb(event.state);
+        } catch (e) {
+          console.error('[NativeSignalRClient] Error in state callback:', e);
         }
       });
     });
@@ -168,9 +180,18 @@ class NativeSignalRClient {
     this.historyCallbacks.delete(callback);
   }
 
+  onConnectionStateChanged(callback: (state: ConnectionState) => void): void {
+    this.stateCallbacks.add(callback);
+  }
+
+  offConnectionStateChanged(callback: (state: ConnectionState) => void): void {
+    this.stateCallbacks.delete(callback);
+  }
+
   clearCallbacks(): void {
     this.profileCallbacks.clear();
     this.historyCallbacks.clear();
+    this.stateCallbacks.clear();
   }
 }
 
@@ -179,6 +200,7 @@ class JSSignalRClient {
   private serverConfig: ServerConfig | null = null;
   private profileCallbacks = new Set<RemoteClipboardChangedCallback>();
   private historyCallbacks = new Set<RemoteHistoryChangedCallback>();
+  private stateCallbacks = new Set<(state: ConnectionState) => void>();
   private isConnecting = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
@@ -251,10 +273,16 @@ class JSSignalRClient {
 
       this.connection.onreconnecting(() => {
         this.reconnectAttempts++;
+        this.stateCallbacks.forEach((cb) => cb('RECONNECTING'));
       });
 
       this.connection.onreconnected(() => {
         this.reconnectAttempts = 0;
+        this.stateCallbacks.forEach((cb) => cb('CONNECTED'));
+      });
+
+      this.connection.onclose(() => {
+        this.stateCallbacks.forEach((cb) => cb('DISCONNECTED'));
       });
 
       await this.connection.start();
@@ -313,9 +341,18 @@ class JSSignalRClient {
     this.historyCallbacks.delete(callback);
   }
 
+  onConnectionStateChanged(callback: (state: ConnectionState) => void): void {
+    this.stateCallbacks.add(callback);
+  }
+
+  offConnectionStateChanged(callback: (state: ConnectionState) => void): void {
+    this.stateCallbacks.delete(callback);
+  }
+
   clearCallbacks(): void {
     this.profileCallbacks.clear();
     this.historyCallbacks.clear();
+    this.stateCallbacks.clear();
   }
 }
 

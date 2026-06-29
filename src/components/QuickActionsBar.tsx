@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 
 interface QuickActionsBarProps {
   onUpload: () => void;
@@ -30,6 +31,7 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
   syncInProgress = false,
 }) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <View
@@ -55,8 +57,10 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
             styles.buttonText,
             { color: disabled ? theme.colors.textTertiary : theme.colors.text },
           ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
         >
-          上传
+          {t('clipboard.upload')}
         </Text>
       </TouchableOpacity>
 
@@ -76,8 +80,12 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
         ) : (
           <Text style={styles.syncButtonIcon}>🔄</Text>
         )}
-        <Text style={[styles.syncButtonText, { color: theme.colors.white }]}>
-          {syncInProgress ? '同步中...' : '同步'}
+        <Text
+          style={[styles.syncButtonText, { color: theme.colors.white }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {syncInProgress ? t('quickTile.syncing') : t('quickTile.sync')}
         </Text>
       </TouchableOpacity>
 
@@ -98,8 +106,10 @@ export const QuickActionsBar: React.FC<QuickActionsBarProps> = ({
             styles.buttonText,
             { color: disabled ? theme.colors.textTertiary : theme.colors.text },
           ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
         >
-          下载
+          {t('clipboard.download')}
         </Text>
       </TouchableOpacity>
     </View>
@@ -119,7 +129,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    height: 44,
     borderRadius: 8,
     marginHorizontal: 4,
   },
@@ -139,7 +149,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
+    height: 48,
     borderRadius: 10,
     marginHorizontal: 8,
   },
