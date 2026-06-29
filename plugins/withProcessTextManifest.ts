@@ -36,11 +36,15 @@ function addProcessTextActivity(
   const activityEntry = {
     $: {
       'android:name': activityName,
-      'android:label': '上传',
       'android:exported': 'true',
-      'android:theme': '@android:style/Theme.NoDisplay',
+      'android:label': '@string/process_text_label',
+      'android:theme': '@style/Theme.QuickAction.Transparent',
       'android:taskAffinity': '',
       'android:excludeFromRecents': 'true',
+      'android:launchMode': 'singleTask',
+      'android:screenOrientation': 'portrait',
+      'android:configChanges':
+        'keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize',
     },
     'intent-filter': [
       {

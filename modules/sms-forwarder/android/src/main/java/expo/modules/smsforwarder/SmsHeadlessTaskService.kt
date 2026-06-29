@@ -29,51 +29,43 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
 
     companion object {
         private const val TAG = "SmsHeadlessTask"
+        private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
         const val CHANNEL_ID = "syncclipboard_sms_headless"
-        const val CHANNEL_NAME = "短信验证码上传"
         const val NOTIFICATION_ID = 0x2022
         const val TASK_NAME = "SmsUploadTask"
         const val ACTION_DISMISS = "expo.modules.smsforwarder.ACTION_DISMISS_COUNTDOWN"
-        /** 任务超时：60 秒（含重试时间） */
         private const val TASK_TIMEOUT_MS = 60_000L
-        /** 成功通知自动清除时间（毫秒） */
         private const val SUCCESS_NOTIFICATION_TIMEOUT_MS = 30_000L
 
         @Volatile
         private var instance: SmsHeadlessTaskService? = null
 
-        /**
-         * JS 侧上传成功后设置的验证码。
-         * 主路径：[startCountdown] 直接发送成功通知。
-         * 兆底：[onHeadlessJsTaskFinish] 检查此变量，确保通知不会遗漏。
-         */
         @Volatile
         var pendingSuccessCode: String? = null
 
-        /**
-         * 从任意位置更新 Headless 服务的前台通知文本。
-         * JS 侧通过 SmsForwarderModule.updateSmsUploadNotification() 调用。
-         */
+        private fun getAppString(context: Context, name: String): String {
+            val resId = context.resources.getIdentifier(name, "string", APP_PACKAGE)
+            return if (resId != 0) context.getString(resId) else name
+        }
+
+        private fun getAppStringFormatted(context: Context, name: String, vararg args: Any): String {
+            val resId = context.resources.getIdentifier(name, "string", APP_PACKAGE)
+            return if (resId != 0) context.getString(resId, *args) else name
+        }
+
         fun updateNotificationText(context: Context, text: String) {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 ?: return
             ensureNotificationChannel(context, nm)
             nm.notify(NOTIFICATION_ID, buildStaticNotification(
                 context, "SyncClipboard", text,
-                dismissButtonLabel = "取消"
+                dismissButtonLabel = getAppString(context, "sms_cancel")
             ))
         }
 
-        /**
-         * 由 JS 侧调用：上传成功后发送成功通知并停止服务。
-         * 主路径：直接通过服务实例发送通知。
-         * 若服务实例不可用，则记录 pendingSuccessCode，
-         * 由 [onHeadlessJsTaskFinish] 兆底处理。
-         */
         fun startCountdown(code: String) {
             NativeLogger.d(TAG, "startCountdown called with code=$code")
             pendingSuccessCode = code
-            // 主路径：直接通过服务实例发送成功通知
             instance?.let { service ->
                 if (!service.isSuccessPosted) {
                     pendingSuccessCode = null
@@ -86,10 +78,10 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    CHANNEL_NAME,
+                    getAppString(context, "sms_channel_name"),
                     NotificationManager.IMPORTANCE_LOW
                 ).apply {
-                    description = "短信验证码后台上传通知"
+                    description = getAppString(context, "sms_channel_desc")
                     setShowBadge(false)
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
@@ -150,13 +142,9 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         instance = this
         pendingSuccessCode = null
         NativeLogger.d(TAG, "[C] Building foreground notification")
-        val notification = buildStaticNotification(this, "SyncClipboard", "正在处理短信验证码…")
+        val notification = buildStaticNotification(this, "SyncClipboard", getAppString(this, "sms_processing"))
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                // shortService: Android 14+ 引入，无 dataSync 的 6小时/24小时累计配额限制，
-                // 最长 3 分钟（任务超时 60s，完全满足）。
-                // dataSync 在主剪贴板同步服务长期运行后配额耗尽，会导致此处抛出
-                // ForegroundServiceStartNotAllowedException，改用 shortService 规避该问题。
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
             } else {
                 startForeground(NOTIFICATION_ID, notification)
@@ -185,13 +173,10 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         return try {
             super.onStartCommand(intent, flags, startId)
         } catch (e: Exception) {
-            // 进程冷启动时 React Native JS 运行时可能无法初始化，
-            // 基类 HeadlessJsTaskService.startTask() 没有异常保护，会直接崩溃。
             NativeLogger.e(TAG, "HeadlessJsTaskService failed to start React context: " +
                     "${e.javaClass.simpleName}: ${e.message}", e)
             updateNotificationText(this,
-                "验证码上传失败：JS 运行时未就绪\n${e.javaClass.simpleName}: ${e.message}")
-            // 5 秒后自动关闭通知并停止服务
+                getAppStringFormatted(this, "sms_upload_failed", "JS runtime not ready: ${e.javaClass.simpleName}: ${e.message}"))
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
@@ -250,8 +235,8 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
         ensureNotificationChannel(this, nm)
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("已上传验证码：$code")
-            .setContentText("30秒后自动关闭")
+            .setContentTitle(getAppStringFormatted(this, "sms_uploaded_title", code))
+            .setContentText(getAppString(this, "sms_auto_close"))
             .setSmallIcon(getNotificationIcon(this))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

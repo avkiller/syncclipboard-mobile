@@ -3,16 +3,43 @@
  * 文件操作公共函数 - 打开、分享文件
  */
 
-import { NativeModules, Platform } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
-import { nativeCopyFile } from 'native-util';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
+import * as Sharing from 'expo-sharing';
+import { nativeCopyFileToDirectory, resetSharingState, type ProgressInfo } from 'native-util';
+import i18n from '@/i18n';
 
 const APP_PACKAGE = 'com.avkiller.syncclipboardmobile';
 
 /**
- * 根据文件 URI / 文件名推断 MIME 类型（模块私有）
+ * 将文件复制到指定目录。
+ *
+ * 底层通过 native 的 WritableLocation 统一处理 SAF 和 MediaStore 写入路径，
+ * JS 侧完全不需要感知目标目录是否为 Downloads 根目录。
+ *
+ * @param fileUri      源文件 URI
+ * @param directoryUri 目标目录 URI
+ * @param fileName     目标文件名，为空则使用源文件名
+ * @param overwrite    是否覆盖同名文件
+ * @param signal       取消信号
+ * @param onProgress   进度回调
  */
-function getMimeTypeFromUri(fileUri: string): string {
+export async function copyFileToDirectory(
+  fileUri: string,
+  directoryUri: string,
+  fileName: string = '',
+  overwrite: boolean = false,
+  signal?: AbortSignal,
+  onProgress?: (info: ProgressInfo) => void
+): Promise<void> {
+  await nativeCopyFileToDirectory(fileUri, directoryUri, fileName, overwrite, signal, onProgress);
+}
+
+/**
+ * 根据文件 URI / 文件名推断 MIME 类型
+ */
+export function getMimeTypeFromUri(fileUri: string): string {
   const name = fileUri.split('?')[0].toLowerCase();
   if (name.endsWith('.apk')) return 'application/vnd.android.package-archive';
   if (name.endsWith('.pdf')) return 'application/pdf';
@@ -28,7 +55,7 @@ function getMimeTypeFromUri(fileUri: string): string {
     name.endsWith('.prm') // expo image format
   )
     return 'image/*';
-  return '*/*';
+  return 'application/octet-stream';
 }
 
 /**
@@ -37,8 +64,6 @@ function getMimeTypeFromUri(fileUri: string): string {
  * - Android 7+ 要求使用 content:// URI
  */
 export async function openFile(fileUri: string): Promise<void> {
-  const FileSystem = await import('expo-file-system/legacy');
-  const IntentLauncher = await import('expo-intent-launcher');
   const mimeType = getMimeTypeFromUri(fileUri);
 
   const contentUri = await FileSystem.getContentUriAsync(fileUri);
@@ -62,62 +87,51 @@ export async function openFile(fileUri: string): Promise<void> {
 }
 
 /**
- * 将文件储存到用户选择的目录（Android SAF）
- * 会弹出系统文件夹选择器，将文件复制到所选位置。
+ * 将文件保存到用户选择的目录（弹出系统目录选择器）
  */
 export async function saveFile(fileUri: string, fileName?: string): Promise<void> {
-  const FileSystem = await import('expo-file-system/legacy');
-  const { StorageAccessFramework } = FileSystem;
+  const name = fileName || fileUri.split('/').pop() || 'file';
 
-  const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+  const permissions = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
   if (!permissions.granted) {
     throw new Error('Storage permission denied');
   }
 
-  const name = fileName || fileUri.split('/').pop() || 'file';
-  const mimeType = getMimeTypeFromUri(fileUri);
-
-  const destUri = await StorageAccessFramework.createFileAsync(
-    permissions.directoryUri,
-    name,
-    mimeType === '*/*' ? 'application/octet-stream' : mimeType
-  );
-
-  // 运行时检查，避免模块顶层静态求值时 NativeModules 尚未注入的问题
-  const hashModule = Platform.OS === 'android' ? (NativeModules.NativeUtilModule ?? null) : null;
-  console.log(
-    '[saveFile] NativeModules.NativeUtilModule:',
-    hashModule,
-    'keys:',
-    hashModule ? Object.keys(hashModule) : 'N/A'
-  );
-
-  if (hashModule?.copyFile) {
-    // 原生流式拷贝：FileChannel.transferTo，不把文件读入 JS/Java 堆
-    await nativeCopyFile(fileUri, destUri);
-  } else {
-    console.warn('[saveFile] falling back to base64, hashModule:', hashModule);
-    // 降级：base64 读写（非 Android 或原生模块未加载时）
-    const content = await FileSystem.readAsStringAsync(fileUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    await FileSystem.writeAsStringAsync(destUri, content, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-  }
+  await copyFileToDirectory(fileUri, permissions.directoryUri, name, true);
 }
 
 /**
  * 通过系统分享对话框分享文件
+ * 自动处理 expo-sharing 的 pendingPromise 状态 bug
  */
 export async function shareFile(fileUri: string, fileName?: string): Promise<void> {
-  const Sharing = await import('expo-sharing');
   const mimeType = getMimeTypeFromUri(fileUri);
-  await Sharing.shareAsync(fileUri, {
+  const options = {
     mimeType,
-    dialogTitle: fileName || '分享文件',
+    dialogTitle: fileName || i18n.t('common.shareFile'),
     UTI: mimeType,
-  });
+  };
+
+  try {
+    await Sharing.shareAsync(fileUri, options);
+  } catch (error) {
+    // 检查是否是 expo-sharing 的状态锁问题
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('Another share request is being processed')) {
+      // 重置 expo-sharing 的状态并重试
+      const resetSuccess = resetSharingState();
+      if (resetSuccess) {
+        try {
+          await Sharing.shareAsync(fileUri, options);
+          return; // 重试成功，直接返回
+        } catch (retryError) {
+          // 重试仍然失败，抛出原始错误
+          throw retryError;
+        }
+      }
+    }
+    throw error;
+  }
 }
 
 /**
@@ -129,7 +143,7 @@ export async function saveToGallery(fileUri: string): Promise<void> {
   const isImage = mimeType.startsWith('image/');
 
   if (!isImage) {
-    throw new Error('仅支持保存图片到相册');
+    throw new Error(i18n.t('clipboard.onlyImageToGallery'));
   }
 
   const { status } = await MediaLibrary.requestPermissionsAsync();

@@ -6,15 +6,29 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text, StyleSheet, BackHandler } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useIncomingShare, clearSharedPayloads, getSharedPayloads } from 'expo-sharing';
 import { useTheme } from '@/hooks/useTheme';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { uploadFileAndAddToHistory, uploadTextAndAddToHistory } from '@/utils/uploadFile';
+import {
+  createContentFromFile,
+  createContentFromText,
+} from '@/utils/clipboard/clipboardContentUtils';
+import { setRemoteClipboard } from '@/services/sync/ClipboardSyncActions';
 import { QuickLoadingPage } from '@/components/QuickLoadingPage';
 import type { ProgressInfo } from 'native-util';
 
+// Debug logging
+const DEBUG = true;
+function log(...args: unknown[]) {
+  if (DEBUG) {
+    console.log('[ShareReceiveScreen]', ...args);
+  }
+}
+
 interface ShareReceiveScreenProps {
   onComplete: () => void;
+  overlayMode?: boolean;
 }
 
 function getFileExtFromMime(mimeType: string | null | undefined): string {
@@ -29,21 +43,37 @@ function getFileExtFromMime(mimeType: string | null | undefined): string {
   return `.${sub}`;
 }
 
-export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComplete }) => {
+export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({
+  onComplete,
+  overlayMode = false,
+}) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const { resolvedSharedPayloads, isResolving, error: resolveError } = useIncomingShare();
   // 挂载时同步读取原始 payload，避免 hook 异步初始化导致误判"没有内容"
-  const [hasShareContent] = useState(() => getSharedPayloads().length > 0);
+  const [hasShareContent] = useState(() => {
+    const payloads = getSharedPayloads();
+    log('Initial getSharedPayloads():', payloads);
+    return payloads.length > 0;
+  });
   const activeServer = useSettingsStore((s) => s.getActiveServer());
-  const [loadingText, setLoadingText] = useState('正在处理文件…');
+  const [loadingText, setLoadingText] = useState(() => t('shareReceive.processingFile'));
   const [progress, setProgress] = useState<ProgressInfo | null>(null);
   const [previewText, setPreviewText] = useState<string | undefined>(undefined);
   const [previewImage, setPreviewImage] = useState<string | undefined>(undefined);
 
+  // Debug: Log resolved payloads
+  useEffect(() => {
+    log('resolvedSharedPayloads:', resolvedSharedPayloads);
+    log('isResolving:', isResolving);
+    log('resolveError:', resolveError);
+  }, [resolvedSharedPayloads, isResolving, resolveError]);
+
   // 挂载时若根本没有分享内容，直接返回
   useEffect(() => {
     if (!hasShareContent) {
+      log('No share content, exiting');
       clearSharedPayloads();
       onComplete();
     }
@@ -52,20 +82,22 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
   // 上传任务：由 QuickTileLoadingScreen 调用（含重试）
   const task = useCallback(
     async (signal: AbortSignal) => {
-      if (resolveError) throw new Error(`解析分享内容失败: ${resolveError.message}`);
-      if (!activeServer) throw new Error('请先在设置中配置服务器');
+      if (resolveError)
+        throw new Error(t('shareReceive.resolveError', { error: resolveError.message }));
+      if (!activeServer) throw new Error(t('common.serverNotConfigured'));
 
       const payload = resolvedSharedPayloads[0];
-      if (!payload) throw new Error('没有可处理的分享内容');
+      if (!payload) throw new Error(t('shareReceive.noContent'));
 
       // 文字分享（text / url 类型，contentUri 为 null）
       // 或 URL 分享（浏览器分享链接时 contentUri 是 https:// 而非本地文件）
       if (!payload.contentUri || payload.shareType === 'url') {
         const text = payload.value?.trim() || '';
-        if (!text) throw new Error('分享的文字内容为空');
-        setLoadingText('正在上传文字…');
+        if (!text) throw new Error(t('shareReceive.emptyText'));
+        setLoadingText(t('shareReceive.uploadingText'));
         setPreviewText(text.slice(0, 100));
-        await uploadTextAndAddToHistory(text, activeServer, { signal });
+        const textContent = await createContentFromText(text, { signal });
+        await setRemoteClipboard(textContent, signal);
         clearSharedPayloads();
         return;
       }
@@ -84,23 +116,20 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
         setPreviewImage(payload.contentUri);
       }
 
-      await uploadFileAndAddToHistory(
+      const content = await createContentFromFile(
         payload.contentUri,
         fileName,
         contentMime,
         undefined,
-        activeServer,
-        {
-          signal,
-          onProgress: (stage, info) => {
-            setLoadingText(stage);
-            setProgress(info ?? null);
-          },
-        }
+        { signal }
       );
+      await setRemoteClipboard(content, signal, (info) => {
+        setLoadingText(t('shareReceive.uploadingFile'));
+        setProgress(info ?? null);
+      });
       clearSharedPayloads();
     },
-    [resolvedSharedPayloads, activeServer, resolveError]
+    [resolvedSharedPayloads, activeServer, resolveError, t]
   );
 
   if (!hasShareContent) return null;
@@ -109,8 +138,8 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
   if (isResolving && !resolveError) {
     return (
       <ResolvingView
-        text="正在解析分享内容…"
-        backgroundColor={theme.colors.surface}
+        text={t('shareReceive.resolving')}
+        backgroundColor={overlayMode ? theme.colors.backdrop : theme.colors.surface}
         textColor={theme.colors.text}
         primaryColor={theme.colors.primary}
         onBack={onComplete}
@@ -122,12 +151,13 @@ export const ShareReceiveScreen: React.FC<ShareReceiveScreenProps> = ({ onComple
     <QuickLoadingPage
       task={task}
       loadingText={loadingText}
-      successText="接收并上传成功"
-      failureText="处理失败"
+      successText={t('shareReceive.success')}
+      failureText={t('shareReceive.failed')}
       onComplete={onComplete}
       progress={progress}
       previewText={previewText}
       previewImage={previewImage}
+      overlayMode={overlayMode}
     />
   );
 };

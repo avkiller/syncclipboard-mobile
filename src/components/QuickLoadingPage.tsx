@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '@/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 import type { ClipboardContent } from '@/types/clipboard';
 import type { ProgressInfo } from 'native-util';
 import { formatFileSize, isTextInvalid } from '@/utils';
@@ -43,6 +44,8 @@ export interface QuickLoadingPageProps {
   previewImage?: string;
   /** When true, renders as a floating card over a semi-transparent backdrop (for transparent Activity). */
   overlayMode?: boolean;
+  /** When true, tapping the backdrop does nothing (used during active save operations). */
+  disableBackdropClose?: boolean;
 }
 
 export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
@@ -57,8 +60,10 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
   previewText,
   previewImage,
   overlayMode,
+  disableBackdropClose,
 }) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [state, setState] = useState<LoadingState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -87,7 +92,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       if (signal.aborted) {
         return;
       }
-      setErrorMessage(err instanceof Error ? err.message : '操作失败，请重试');
+      setErrorMessage(err instanceof Error ? err.message : t('common.defaultError'));
       setState('error');
     }
   }, [onComplete]);
@@ -154,7 +159,11 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
     <View
       style={[
         styles.content,
-        overlayMode && [styles.overlayCard, { backgroundColor: theme.colors.surface }],
+        overlayMode && [
+          styles.overlayCard,
+          styles.overlayCardShadow,
+          { backgroundColor: theme.colors.surface, shadowColor: theme.colors.shadow },
+        ],
       ]}
     >
       {state === 'loading' && (
@@ -182,7 +191,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
               </View>
               <Text style={[styles.progressText, { color: theme.colors.textSecondary }]}>
                 {progress.totalBytes > 0
-                  ? `${(progress.progress * 100).toFixed(0)}% ${formatFileSize(progress.bytesTransferred)} / ${formatFileSize(progress.totalBytes)}`
+                  ? `${(progress.progress * 100).toFixed(0)}% ${formatFileSize(
+                      progress.bytesTransferred
+                    )} / ${formatFileSize(progress.totalBytes)}`
                   : formatFileSize(progress.bytesTransferred)}
               </Text>
             </View>
@@ -195,7 +206,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
             ]}
             onPress={handleCancel}
           >
-            <Text style={[styles.buttonText, { color: theme.colors.text }]}>取消</Text>
+            <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+              {t('common.cancel')}
+            </Text>
           </TouchableOpacity>
         </>
       )}
@@ -234,6 +247,8 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                       styles.buttonText,
                       { color: btn.primary ? theme.colors.white : theme.colors.text },
                     ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                   >
                     {btn.label}
                   </Text>
@@ -248,7 +263,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                 ]}
                 onPress={onComplete}
               >
-                <Text style={[styles.buttonText, { color: theme.colors.text }]}>返回</Text>
+                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                  {t('common.back')}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -274,7 +291,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
               style={[styles.button, { backgroundColor: theme.colors.primary }]}
               onPress={run}
             >
-              <Text style={[styles.buttonText, { color: theme.colors.white }]}>重试</Text>
+              <Text style={[styles.buttonText, { color: theme.colors.white }]}>
+                {t('common.retry')}
+              </Text>
             </TouchableOpacity>
             {errorMessage && (
               <TouchableOpacity
@@ -285,7 +304,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
                 ]}
                 onPress={() => Clipboard.setStringAsync(errorMessage)}
               >
-                <Text style={[styles.buttonText, { color: theme.colors.text }]}>复制</Text>
+                <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                  {t('common.copy')}
+                </Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -296,7 +317,9 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
               ]}
               onPress={onComplete}
             >
-              <Text style={[styles.buttonText, { color: theme.colors.text }]}>返回</Text>
+              <Text style={[styles.buttonText, { color: theme.colors.text }]}>
+                {t('common.back')}
+              </Text>
             </TouchableOpacity>
           </View>
         </>
@@ -309,6 +332,7 @@ export const QuickLoadingPage: React.FC<QuickLoadingPageProps> = ({
       {overlayMode ? (
         <TouchableWithoutFeedback
           onPress={() => {
+            if (disableBackdropClose) return;
             if (state !== 'loading') onComplete();
           }}
         >
@@ -354,7 +378,7 @@ const ContentPreview: React.FC<{ content: ClipboardContent }> = ({ content }) =>
   }
 
   // File (or Image without local URI)
-  const label = content.fileName ?? content.text ?? '未知文件';
+  const label = content.text || content.fileName || '未知文件';
   const size = content.fileSize != null ? ` · ${(content.fileSize / 1024).toFixed(1)} KB` : '';
   return (
     <View
@@ -364,7 +388,7 @@ const ContentPreview: React.FC<{ content: ClipboardContent }> = ({ content }) =>
       ]}
     >
       <Text style={[styles.previewFileIcon, { color: theme.colors.primary }]}>📄</Text>
-      <Text style={[styles.previewFileName, { color: theme.colors.text }]} numberOfLines={2}>
+      <Text style={[styles.previewFileName, { color: theme.colors.text }]} numberOfLines={10}>
         {label}
       </Text>
       {size !== '' && (
@@ -424,7 +448,7 @@ const styles = StyleSheet.create({
   },
   successButton: {
     flex: 1,
-    paddingHorizontal: 0,
+    paddingHorizontal: 8,
   },
   button: {
     paddingHorizontal: 28,
@@ -520,5 +544,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     width: '85%',
     alignSelf: 'center',
+    elevation: 12,
+  },
+  overlayCardShadow: {
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
 });

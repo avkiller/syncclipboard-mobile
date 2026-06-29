@@ -22,7 +22,7 @@ export enum HistorySyncStatus {
 /**
  * 剪贴板项目
  */
-export interface ClipboardItem {
+export interface HistoryItem {
   /** 内容类型 */
   type: ClipboardContentType;
 
@@ -82,34 +82,25 @@ export interface ClipboardItem {
   /** 是否置顶 */
   pinned: boolean;
 
-  /** 本地数据是否就绪（false表示仅有元数据） */
-  isLocalFileReady: boolean;
-
   /** 来源设备 */
   from?: string;
+}
 
-  /** 远程是否有数据（服务器HasData字段） */
-  hasRemoteData?: boolean;
+export function isLocalFileReady(item: HistoryItem): boolean {
+  return !item.hasData || !!item.fileUri;
 }
 
 /**
  * 创建 ClipboardItem 的默认值
  */
-export function createDefaultClipboardItem(
+export function createHistoryItem(
   base: Omit<
-    ClipboardItem,
-    | 'starred'
-    | 'syncStatus'
-    | 'version'
-    | 'lastModified'
-    | 'lastAccessed'
-    | 'isDeleted'
-    | 'pinned'
-    | 'isLocalFileReady'
+    HistoryItem,
+    'starred' | 'syncStatus' | 'version' | 'lastModified' | 'lastAccessed' | 'isDeleted' | 'pinned'
   > &
     Partial<
       Pick<
-        ClipboardItem,
+        HistoryItem,
         | 'starred'
         | 'syncStatus'
         | 'version'
@@ -117,10 +108,9 @@ export function createDefaultClipboardItem(
         | 'lastAccessed'
         | 'isDeleted'
         | 'pinned'
-        | 'isLocalFileReady'
       >
     >
-): ClipboardItem {
+): HistoryItem {
   const now = Date.now();
   return {
     starred: false,
@@ -130,7 +120,6 @@ export function createDefaultClipboardItem(
     lastAccessed: now,
     isDeleted: false,
     pinned: false,
-    isLocalFileReady: true,
     ...base,
   };
 }
@@ -143,7 +132,7 @@ export interface ClipboardContent {
   type: ClipboardContentType;
 
   /** 文本内容 */
-  text?: string;
+  text: string;
 
   /** 文件 URI（本地文件路径） */
   fileUri?: string;
@@ -167,7 +156,7 @@ export interface ClipboardContent {
   timestamp?: number;
 
   /** 是否有额外数据文件（用于标识是否需要处理外部文件） */
-  hasData?: boolean;
+  hasData: boolean;
 }
 
 /**
@@ -181,18 +170,12 @@ export type ClipboardChangeCallback = (content: ClipboardContent) => void;
 export interface ClipboardMonitorOptions {
   /** 轮询间隔（毫秒），仅 iOS 使用 */
   pollingInterval?: number;
-
-  /** 是否在应用进入后台时停止监听 */
-  stopOnBackground?: boolean;
-
-  /** 防抖延迟（毫秒） */
-  debounceDelay?: number;
 }
 
 /**
  * 剪贴板历史项
  */
-export interface ClipboardHistoryItem extends ClipboardItem {
+export interface ClipboardHistoryItem extends HistoryItem {
   /** 备注 */
   note?: string;
 
