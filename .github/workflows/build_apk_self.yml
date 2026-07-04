@@ -68,8 +68,36 @@ jobs:
           android.defaults.buildfeatures.buildconfig=true
           EOF
 
+      - name: Customize Android Package Name
+        run: |
+          OLD_PKG="com.jericx.syncclipboardmobile"
+          NEW_PKG="com.avkiller.syncclipboardmobile"
+          
+          echo "1. 正在全局替换 Java/Kotlin 源码中的包名声明和 import..."
+          # 遍历所有 Java 和 Kotlin 文件，将旧包名批量替换为新包名
+          find src/android/app/src/main/ -type f \( -name "*.kt" -o -name "*.java" -o -name "*.xml" \) -exec sed -i "s/$OLD_PKG/$NEW_PKG/g" {} +
+
+          echo "2. 正在重构物理目录结构以匹配新包名..."
+          # Android 的包名和物理文件夹路径必须严格一致。
+          # 旧路径：src/android/app/src/main/java/com/jericx/syncclipboardmobile
+          # 新路径：src/android/app/src/main/java/com/avkiller/syncclipboardmobile
+          
+          OLD_DIR="src/android/app/src/main/java/com/jericx"
+          NEW_DIR="src/android/app/src/main/java/com/avkiller"
+          
+          if [ -d "$OLD_DIR" ]; then
+            # 创建新的父目录
+            mkdir -p "$NEW_DIR"
+            # 将旧包名下的内容移动到新包名下
+            mv "$OLD_DIR/syncclipboardmobile" "$NEW_DIR/"
+            # 删掉已经空了的旧目录
+            rm -rf "$OLD_DIR"
+            echo "目录结构重构完成！"
+          else
+            echo "未找到旧目录，可能已被修改，跳过目录移动。"
+          fi
+
       - name: Inject Signing Config to build.gradle
-        if: false
         run: |
           # 仅插入签名配置 logic，不重复外层的 android {} 块
           # 这里的逻辑是：在 android 块内部查找并替换
@@ -86,11 +114,6 @@ jobs:
           # 在 buildTypes 的 release 块中启用签名
           sed -i '/buildTypes {/,/}/ s/release {/release { signingConfig signingConfigs.release/' android/app/build.gradle
           sed -i '/release {/,/}/ s/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
-          echo "android.defaults.buildfeatures.buildconfig=true" >> android/gradle.properties
-          # echo RELEASE_STORE_FILE=your-keystore-file.jks >> android/gradle.properties
-          # echo RELEASE_STORE_PASSWORD=your-store-password >> android/gradle.properties
-          # echo RELEASE_KEY_ALIAS=your-key-alias >> android/gradle.properties
-          # echo  RELEASE_KEY_PASSWORD=your-key-password >> android/gradle.properties
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew

@@ -14,7 +14,7 @@ import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
-import com.jericx.syncclipboardmobile.BuildConfig
+import com.avkiller.syncclipboardmobile.BuildConfig
 import expo.modules.ReactActivityDelegateWrapper
 
 /**

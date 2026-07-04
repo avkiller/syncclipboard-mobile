@@ -16,7 +16,7 @@ class SyncForegroundService : Service() {
 
     companion object {
         private const val TAG = "SyncForegroundService"
-        private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
+        private const val APP_PACKAGE = "com.avkiller.syncclipboardmobile"
         const val CHANNEL_ID = "syncclipboard_foreground"
         const val NOTIFY_ID = 0x2020
         const val ACTION_START = "START"

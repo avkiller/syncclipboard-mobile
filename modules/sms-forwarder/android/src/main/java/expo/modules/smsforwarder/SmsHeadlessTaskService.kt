@@ -29,7 +29,7 @@ class SmsHeadlessTaskService : HeadlessJsTaskService() {
 
     companion object {
         private const val TAG = "SmsHeadlessTask"
-        private const val APP_PACKAGE = "com.jericx.syncclipboardmobile"
+        private const val APP_PACKAGE = "com.avkiller.syncclipboardmobile"
         const val CHANNEL_ID = "syncclipboard_sms_headless"
         const val NOTIFICATION_ID = 0x2022
         const val TASK_NAME = "SmsUploadTask"
