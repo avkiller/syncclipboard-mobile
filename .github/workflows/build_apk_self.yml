@@ -65,9 +65,11 @@ jobs:
           RELEASE_STORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}
+          android.defaults.buildfeatures.buildconfig=true
           EOF
 
       - name: Inject Signing Config to build.gradle
+        if: false
         run: |
           # 仅插入签名配置 logic，不重复外层的 android {} 块
           # 这里的逻辑是：在 android 块内部查找并替换
@@ -84,7 +86,11 @@ jobs:
           # 在 buildTypes 的 release 块中启用签名
           sed -i '/buildTypes {/,/}/ s/release {/release { signingConfig signingConfigs.release/' android/app/build.gradle
           sed -i '/release {/,/}/ s/signingConfig signingConfigs.debug/signingConfig signingConfigs.release/' android/app/build.gradle
-          echo "android.defaults.buildfeatures.buildconfig=true" > android/gradle.properties
+          echo "android.defaults.buildfeatures.buildconfig=true" >> android/gradle.properties
+          # echo RELEASE_STORE_FILE=your-keystore-file.jks >> android/gradle.properties
+          # echo RELEASE_STORE_PASSWORD=your-store-password >> android/gradle.properties
+          # echo RELEASE_KEY_ALIAS=your-key-alias >> android/gradle.properties
+          # echo  RELEASE_KEY_PASSWORD=your-key-password >> android/gradle.properties
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
