@@ -44,6 +44,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-disabled: true
 
       - name: Install dependencies
         run: npm ci
@@ -90,7 +92,7 @@ jobs:
         run: cat android/app/build.gradle
 
       - name: Build Release APK
-        run: cd android && ./gradlew clean assembleRelease
+        run: cd android && ./gradlew assembleRelease --stacktrace
         env:
           # 以下变量会被 Expo 生成的 Gradle 脚本自动识别或用于覆盖
           RELEASE_STORE_FILE: android_release.keystore
